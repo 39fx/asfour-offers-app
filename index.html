@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- App Bridge must load first; the api key is the app's public client id. -->
+  <meta name="shopify-api-key" content="bb93b709eabcc01ea192be3cc5ab86ae">
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+  <title>مدير العروض</title>
+  <style>
+    :root {
+      --bg: #f4f5f2; --card: #fff; --text: #1a1d1b; --muted: #6b716d; --line: #e3e6e2;
+      --primary: #0f4d36; --primary-soft: #e6f1ec; --danger: #b42318; --danger-soft: #fdecea;
+      --warn: #a15c07; --warn-soft: #fff4e0; --info-soft: #eef2ff; --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", Tahoma, system-ui, sans-serif; }
+    button, input, select { font: inherit; color: inherit; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 20px; margin: 0; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; }
+
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .tabs { display: flex; gap: 4px; background: #e9ebe7; padding: 4px; border-radius: 10px; overflow-x: auto; }
+    .tab { border: 0; background: transparent; padding: 7px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: 600; color: var(--muted); }
+    .tab[aria-selected="true"] { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+    .btn { border: 1px solid var(--line); background: #fff; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+    .btn:hover { background: #f7f8f6; }
+    .btn--primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn--primary:hover { background: #0b3d2a; }
+    .btn--danger { color: var(--danger); }
+    .btn--sm { padding: 4px 10px; font-size: 13px; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .icon-btn { border: 1px solid var(--line); background: #fff; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; line-height: 1; }
+
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; text-align: start; }
+    .stat b { display: block; font-size: 22px; }
+    .stat[aria-pressed="true"] { outline: 2px solid var(--primary); }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px; border-bottom: 1px solid var(--line); align-items: center; }
+    .toolbar .grow { flex: 1 1 220px; }
+    .input, select.input { width: 100%; border: 1px solid #cfd4cf; border-radius: 8px; padding: 7px 10px; background: #fff; }
+    .input:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+
+    .bulk { display: none; gap: 8px; align-items: center; padding: 10px 12px; background: var(--primary-soft); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .bulk.is-on { display: flex; }
+
+    .row { display: grid; grid-template-columns: 28px 44px 56px minmax(160px, 2fr) 130px minmax(140px, 1.4fr) 120px 150px; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+    .row:last-child { border-bottom: 0; }
+    .row--head { font-size: 12px; color: var(--muted); font-weight: 600; background: #fafbf9; border-radius: var(--radius) var(--radius) 0 0; }
+    .row.is-off { background: #fbfbfa; }
+    .row.is-off .thumb, .row.is-off .name { opacity: .55; }
+    .rank { font-weight: 700; color: var(--muted); text-align: center; }
+    .thumb { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #eee; display: block; }
+    .name b { display: block; }
+    .prio { display: flex; gap: 4px; align-items: center; }
+    .prio input { width: 64px; text-align: center; padding: 5px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip { font-size: 11px; background: #f0f1ee; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+    .badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+    .badge--ok { background: var(--primary-soft); color: var(--primary); }
+    .badge--out { background: var(--danger-soft); color: var(--danger); }
+    .badge--hidden { background: var(--warn-soft); color: var(--warn); }
+    .badge--draft { background: var(--info-soft); color: #3730a3; }
+    .actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+    .switch { position: relative; width: 38px; height: 22px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch span { position: absolute; inset: 0; background: #c9cec9; border-radius: 99px; cursor: pointer; transition: .15s; }
+    .switch span::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: .15s; }
+    .switch input:checked + span { background: var(--primary); }
+    .switch input:checked + span::after { inset-inline-start: 19px; }
+    .switch input:disabled + span { opacity: .5; cursor: default; }
+    .stock-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .field label { font-weight: 600; font-size: 13px; }
+    .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+    .checks label { display: flex; gap: 6px; align-items: center; font-weight: 400; cursor: pointer; }
+    .note { background: var(--info-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+    .note--warn { background: var(--warn-soft); }
+
+    dialog { border: 0; border-radius: 14px; padding: 0; width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 32px); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    dialog::backdrop { background: rgba(0,0,0,.35); }
+    .dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; z-index: 1; }
+    .dlg-body { padding: 16px; }
+    .dlg-foot { display: flex; justify-content: flex-start; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: #fff; }
+    .vtable { width: 100%; border-collapse: collapse; }
+    .vtable td, .vtable th { padding: 6px 4px; text-align: start; border-bottom: 1px solid var(--line); }
+    .vtable input { width: 90px; }
+
+    .cat-list .row, .offer-list .row { grid-template-columns: minmax(160px, 1.5fr) 100px minmax(200px, 2fr) 140px; }
+    .preview { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; padding: 12px; }
+    .preview figure { margin: 0; text-align: center; font-size: 11px; }
+    .preview img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #eee; }
+    .preview figcaption b { color: var(--primary); }
+
+    .toast { position: fixed; bottom: 18px; inset-inline-start: 50%; transform: translateX(50%); background: #1a1d1b; color: #fff; padding: 9px 16px; border-radius: 10px; opacity: 0; transition: .2s; pointer-events: none; z-index: 50; }
+    .toast.is-on { opacity: 1; }
+    .toast.is-err { background: var(--danger); }
+    .loading { padding: 60px; text-align: center; color: var(--muted); }
+    .demo-bar { background: var(--warn-soft); color: var(--warn); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+
+    /* Phones: each perfume becomes a compact card */
+    @media (max-width: 860px) {
+      .stats { grid-template-columns: repeat(3, 1fr); }
+      .row--head { display: none; }
+      .row { grid-template-columns: 24px 48px 1fr; grid-template-areas: "sel thumb name" "rank rank rank" "prio prio prio" "cats cats cats" "stock stock stock" "act act act"; row-gap: 8px; }
+      .row > .c-sel { grid-area: sel; } .row > .c-thumb { grid-area: thumb; } .row > .c-name { grid-area: name; }
+      .row > .c-rank { display: none; }
+      .row > .c-prio { grid-area: prio; } .row > .c-cats { grid-area: cats; } .row > .c-stock { grid-area: stock; } .row > .c-act { grid-area: act; }
+      .stock-cell { flex-direction: row; flex-wrap: wrap; align-items: center; }
+      .actions { justify-content: flex-start; }
+      .c-prio::before { content: "الأولوية:"; font-size: 12px; color: var(--muted); margin-inline-end: 6px; }
+      .cat-list .row, .offer-list .row { grid-template-columns: 1fr; grid-template-areas: none; }
+      .grid2 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 860px) {
+      .stats { display: flex; overflow-x: auto; gap: 8px; padding-bottom: 2px; scrollbar-width: none; }
+      .stat { flex: 0 0 auto; min-width: 104px; padding: 8px 12px; }
+      .stat b { font-size: 18px; }
+      .toolbar .grow { flex-basis: 100%; }
+    }
+    @media (max-width: 480px) { .wrap { padding: 10px; } h1 { font-size: 18px; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div id="demo-bar" class="demo-bar" hidden>وضع تجربة: هذه بيانات تجريبية ولا يتم حفظ أي شيء في المتجر.</div>
+  <div class="top">
+    <div>
+      <h1>مدير العروض والعطور</h1>
+      <div class="muted small">ترتيب العطور كما يراها الزبون داخل العروض، والمتوفر والخالص، والتصنيفات</div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="list" aria-selected="true">العطور</button>
+      <button class="tab" role="tab" data-tab="preview">معاينة ترتيب الزبون</button>
+      <button class="tab" role="tab" data-tab="cats">التصنيفات</button>
+      <button class="tab" role="tab" data-tab="offers">العروض</button>
+      <button class="tab" role="tab" data-tab="archive">المحذوفة</button>
+    </div>
+  </div>
+
+  <div id="app"><div class="loading">جاري تحميل العطور…</div></div>
+</div>
+
+<dialog id="dlg"></dialog>
+<dialog id="ask" style="width:min(420px, calc(100vw - 24px))"></dialog>
+<div id="toast" class="toast" role="status"></div>
+
+<script>
+(() => {
+  const API = 'shopify:admin/api/2025-10/graphql.json';
+  const HIDE_TAG = 'مخفي-من-العروض';
+  const SOURCE_HANDLE = 'perfumes';            // the collection the offer picker lists
+  const SKIP_TYPES = ['عرض', 'بكج', 'خدمة'];   // offers, bundles and service products are not perfumes
+  const SERVICE_TAG = 'منتج-خدمة';
+  const SKIP_COLLECTIONS = ['frontpage', 'offers'];
+  const FAMILIES = ['فانيليا', 'خشبي', 'توابل', 'زهري', 'حمضيات', 'عود'];
+  const GENDERS = ['رجالي', 'نسائي', 'للجنسين'];
+  // Shopify always opens an embedded app with ?shop=…&host=…; anything else is the offline demo.
+  const params = new URLSearchParams(location.search);
+  const DEMO = !(params.has('host') || params.has('shop'));
+
+  const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
+              priorityType: 'number_integer', tab: 'list', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set() };
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const num = v => (v === '' || v == null || isNaN(Number(v)) ? null : Number(v));
+
+  function toast(msg, err = false) {
+    if (!DEMO && window.shopify?.toast) return shopify.toast.show(msg, { isError: err, duration: err ? 6000 : 2500 });
+    const t = $('#toast');
+    t.textContent = msg; t.classList.toggle('is-err', err); t.classList.add('is-on');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('is-on'), err ? 6000 : 2500);
+  }
+
+  /* ---------------- Admin API ---------------- */
+  async function gql(query, variables = {}) {
+    const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
+    const j = await res.json();
+    if (j.errors) throw new Error(j.errors.map(e => e.message).join(' | '));
+    return j.data;
+  }
+  // Every mutation returns userErrors; surface them as one exception.
+  function check(payload) {
+    const errs = payload?.userErrors || [];
+    if (errs.length) throw new Error(errs.map(e => e.message).join(' | '));
+    return payload;
+  }
+
+  const PRODUCT_FIELDS = `
+    id title handle status productType tags vendor
+    featuredMedia { preview { image { url(transform: { maxWidth: 160 }) } } }
+    priority: metafield(namespace: "custom", key: "priority") { value type }
+    english: metafield(namespace: "custom", key: "english_name") { value }
+    options(first: 3) { name }
+    collections(first: 30) { nodes { id } }
+    variants(first: 20) { nodes { id title price compareAtPrice inventoryQuantity
+      inventoryItem { id tracked inventoryLevels(first: 1) { nodes { location { id } } } } } }`;
+
+  function mapProduct(n) {
+    return {
+      id: n.id, title: n.title, handle: n.handle, status: n.status, type: n.productType || '', tags: n.tags || [],
+      english: n.english?.value || '', priority: num(n.priority?.value), image: n.featuredMedia?.preview?.image?.url || '',
+      optionName: n.options?.[0]?.name, collections: n.collections.nodes.map(c => c.id),
+      variants: n.variants.nodes.map(v => ({ id: v.id, title: v.title, price: v.price, compareAt: v.compareAtPrice,
+        qty: v.inventoryQuantity ?? 0, invItem: v.inventoryItem.id, tracked: v.inventoryItem.tracked,
+        loc: v.inventoryItem.inventoryLevels.nodes[0]?.location.id })),
+      _ptype: n.priority?.type
+    };
+  }
+
+  const live = {
+    async load() {
+      const products = [];
+      let after = null;
+      do {
+        const d = await gql(`query($after: String) { products(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor } nodes { ${PRODUCT_FIELDS} } } }`, { after });
+        products.push(...d.products.nodes);
+        after = d.products.pageInfo.hasNextPage ? d.products.pageInfo.endCursor : null;
+      } while (after);
+
+      const d2 = await gql(`{ collections(first: 100) { nodes { id title handle productsCount { count }
+          ruleSet { appliedDisjunctively rules { column relation condition } } } }
+        publications(first: 20) { nodes { id name } } }`);
+
+      S.collections = d2.collections.nodes.map(c => ({ id: c.id, title: c.title, handle: c.handle, count: c.productsCount?.count ?? 0,
+        smart: !!c.ruleSet, any: c.ruleSet?.appliedDisjunctively ?? false, rules: c.ruleSet?.rules || [] }));
+      S.onlinePub = (d2.publications.nodes.find(p => /online store/i.test(p.name)) || {}).id || null;
+
+      const all = products.map(mapProduct);
+      S.offers = all.filter(p => ['عرض', 'بكج'].includes(p.type));
+      S.products = all.filter(p => !SKIP_TYPES.includes(p.type) && !p.tags.includes(SERVICE_TAG));
+      const withLoc = all.flatMap(p => p.variants).find(v => v.loc);
+      S.locationId = withLoc?.loc || null;
+      const pt = all.find(p => p._ptype); if (pt) S.priorityType = pt._ptype;
+      const names = S.products.map(p => p.optionName).filter(Boolean);
+      if (names.length) S.optionName = mode(names);
+    },
+
+    async setPriority(p, value) {
+      const d = await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
+        { m: [{ ownerId: p.id, namespace: 'custom', key: 'priority', type: S.priorityType, value: String(value) }] });
+      check(d.metafieldsSet);
+    },
+    async setPriorities(list) {               // [{p, value}] in chunks of 25 (API limit)
+      for (let i = 0; i < list.length; i += 25) {
+        const m = list.slice(i, i + 25).map(({ p, value }) => ({ ownerId: p.id, namespace: 'custom', key: 'priority', type: S.priorityType, value: String(value) }));
+        const d = await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`, { m });
+        check(d.metafieldsSet);
+      }
+    },
+    async addTags(p, tags) {
+      if (!tags.length) return;
+      check((await gql(`mutation($id: ID!, $t: [String!]!) { tagsAdd(id: $id, tags: $t) { userErrors { message } } }`, { id: p.id, t: tags })).tagsAdd);
+    },
+    async removeTags(p, tags) {
+      if (!tags.length) return;
+      check((await gql(`mutation($id: ID!, $t: [String!]!) { tagsRemove(id: $id, tags: $t) { userErrors { message } } }`, { id: p.id, t: tags })).tagsRemove);
+    },
+    async setStock(p, perVariant) {           // perVariant: Map(variantId -> qty)
+      const loc = S.locationId;
+      if (!loc) throw new Error('لم يتم العثور على موقع المخزون');
+      for (const v of p.variants) {
+        if (!perVariant.has(v.id) || v.tracked) continue;
+        check((await gql(`mutation($id: ID!) { inventoryItemUpdate(id: $id, input: { tracked: true }) { userErrors { message } } }`, { id: v.invItem })).inventoryItemUpdate);
+      }
+      const quantities = p.variants.filter(v => perVariant.has(v.id)).map(v => ({ inventoryItemId: v.invItem, locationId: v.loc || loc, quantity: perVariant.get(v.id) }));
+      const d = await gql(`mutation($i: InventorySetQuantitiesInput!) { inventorySetQuantities(input: $i) { userErrors { message } } }`,
+        { i: { name: 'available', reason: 'correction', ignoreCompareQuantity: true, quantities } });
+      check(d.inventorySetQuantities);
+    },
+    async setStatus(p, status) {
+      check((await gql(`mutation($p: ProductUpdateInput!) { productUpdate(product: $p) { userErrors { message } } }`, { p: { id: p.id, status } })).productUpdate);
+    },
+    async destroy(p) {
+      check((await gql(`mutation($id: ID!) { productDelete(input: { id: $id }) { userErrors { message } } }`, { id: p.id })).productDelete);
+    },
+    async addToCollection(colId, p) {
+      check((await gql(`mutation($id: ID!, $p: [ID!]!) { collectionAddProducts(id: $id, productIds: $p) { userErrors { message } } }`, { id: colId, p: [p.id] })).collectionAddProducts);
+    },
+    async removeFromCollection(colId, p) {
+      check((await gql(`mutation($id: ID!, $p: [ID!]!) { collectionRemoveProducts(id: $id, productIds: $p) { userErrors { message } } }`, { id: colId, p: [p.id] })).collectionRemoveProducts);
+    },
+    async updateBasics(p, { title, type, english }) {
+      check((await gql(`mutation($p: ProductUpdateInput!) { productUpdate(product: $p) { userErrors { message } } }`,
+        { p: { id: p.id, title, productType: type } })).productUpdate);
+      const d = await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
+        { m: [{ ownerId: p.id, namespace: 'custom', key: 'english_name', type: 'single_line_text_field', value: english || ' ' }] });
+      check(d.metafieldsSet);
+    },
+    async updatePrices(p, rows) {             // rows: [{id, price, compareAt}]
+      if (!rows.length) return;
+      const d = await gql(`mutation($pid: ID!, $v: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $pid, variants: $v) { userErrors { message } } }`,
+        { pid: p.id, v: rows.map(r => ({ id: r.id, price: r.price, compareAtPrice: r.compareAt || null })) });
+      check(d.productVariantsBulkUpdate);
+    },
+    async uploadImage(file) {
+      const d = await gql(`mutation($i: [StagedUploadInput!]!) { stagedUploadsCreate(input: $i) {
+          stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+        { i: [{ resource: 'IMAGE', filename: file.name, mimeType: file.type || 'image/jpeg', httpMethod: 'POST', fileSize: String(file.size) }] });
+      const t = check(d.stagedUploadsCreate).stagedTargets[0];
+      const form = new FormData();
+      t.parameters.forEach(x => form.append(x.name, x.value));
+      form.append('file', file);
+      const up = await fetch(t.url, { method: 'POST', body: form });
+      if (!up.ok) throw new Error('فشل رفع الصورة');
+      return t.resourceUrl;
+    },
+    async setImage(p, source) {
+      const d = await gql(`mutation($p: ProductUpdateInput!, $m: [CreateMediaInput!]) { productUpdate(product: $p, media: $m) { userErrors { message } } }`,
+        { p: { id: p.id }, m: [{ originalSource: source, mediaContentType: 'IMAGE' }] });
+      check(d.productUpdate);
+    },
+    async create(f) {
+      const loc = S.locationId;
+      const variants = f.sizes.map(s => ({
+        optionValues: [{ optionName: S.optionName, name: s.name }], price: s.price, compareAtPrice: s.compareAt || null,
+        inventoryItem: { tracked: true }, ...(loc ? { inventoryQuantities: [{ locationId: loc, name: 'available', quantity: s.qty }] } : {})
+      }));
+      const input = {
+        title: f.title, productType: f.type, vendor: 'عطور عصفور', status: 'ACTIVE', tags: f.tags,
+        productOptions: [{ name: S.optionName, values: f.sizes.map(s => ({ name: s.name })) }], variants,
+        metafields: [
+          ...(f.priority != null ? [{ namespace: 'custom', key: 'priority', type: S.priorityType, value: String(f.priority) }] : []),
+          ...(f.english ? [{ namespace: 'custom', key: 'english_name', type: 'single_line_text_field', value: f.english }] : [])
+        ],
+        ...(f.image ? { files: [{ originalSource: f.image, contentType: 'IMAGE' }] } : {})
+      };
+      const d = await gql(`mutation($i: ProductSetInput!) { productSet(synchronous: true, input: $i) { product { ${PRODUCT_FIELDS} } userErrors { message } } }`, { i: input });
+      const prod = check(d.productSet).product;
+      if (S.onlinePub) {
+        const pub = await gql(`mutation($id: ID!, $i: [PublicationInput!]!) { publishablePublish(id: $id, input: $i) { userErrors { message } } }`,
+          { id: prod.id, i: [{ publicationId: S.onlinePub }] });
+        check(pub.publishablePublish);
+      }
+      return mapProduct(prod);
+    }
+  };
+
+  /* ---------------- Demo data (preview outside Shopify) ---------------- */
+  const demo = (() => {
+    const names = [['سترونغر وذ يو انتنسلي', 'Stronger With You Intensely'], ['سوفاج ديور', 'Sauvage Dior'], ['ليتون دي مارلي', 'Layton de Marly'],
+      ['ديلينا دي مارلي', 'Delina de Marly'], ['يارا لطافة', 'Yara Lattafa'], ['كيالي مارشميلو', 'Kayali Marshmallow'], ['بلاك اوبيوم واي إس إل', 'Black Opium YSL'],
+      ['جاز كلوب ريبيليكا', 'Jazz Club Replica'], ['عود وود توم فورد', 'Oud Wood Tom Ford'], ['ون مليون', '1 Million'], ['خمرة قهوة', 'Khamrah Qahwa'], ['افينتوس كريد', 'Aventus Creed']];
+    const cols = [['perfumes', 'جميع العطور', 'عطر'], ['men', 'المجموعة الرجالية', 'رجالي'], ['women', 'المجموعة النسائية', 'نسائي'], ['unisex', 'عطور للجنسين', 'للجنسين'],
+      ['oud', 'عود وأخشاب ملكية', 'عود'], ['vanilla', 'فانيلا وعنبر دافئ', 'فانيليا'], ['citrus', 'حمضيات وانتعاش صيفي', 'حمضيات'], ['best-sellers', 'الأكثر طلباً', 'الأكثر طلباً']];
+    const wait = () => new Promise(r => setTimeout(r, 150));
+    return {
+      async load() {
+        await wait();
+        S.collections = cols.map(([h, t, tag], i) => ({ id: 'c' + i, title: t, handle: h, count: 0, smart: true, any: false, rules: [{ column: 'TAG', relation: 'EQUALS', condition: tag }] }));
+        S.products = names.map(([t, e], i) => {
+          const tags = ['عطر', GENDERS[i % 3], FAMILIES[i % 6], ...(i % 4 === 0 ? ['الأكثر طلباً'] : []), ...(i === 9 ? [HIDE_TAG] : [])];
+          return { id: 'p' + i, title: t, handle: 'p' + i, status: 'ACTIVE', type: FAMILIES[i % 6], tags, english: e, priority: i < 10 ? 999 - i : null,
+            image: '', variants: [{ id: 'v' + i + 'a', title: '110ML', price: '15.000', compareAt: '95.000', qty: i === 7 ? 0 : 40, invItem: 'i', tracked: true, loc: 'l' },
+              { id: 'v' + i + 'b', title: '50ML', price: '11.000', compareAt: null, qty: i === 7 ? 0 : 25, invItem: 'i', tracked: true, loc: 'l' }], collections: [] };
+        });
+        S.products.forEach(syncSmartCollections);
+        S.offers = [{ id: 'o1', title: 'العرض الكلاسيكي | 3 عطور حجم 50مل', handle: 'offer-classic', status: 'ACTIVE', variants: [{ price: '20.000', compareAt: '33.000' }] },
+          { id: 'o2', title: 'الأكثر طلباً | 3 عطور حجم 110مل + عطر 50مل مجاناً', handle: 'offer-strong', status: 'ACTIVE', variants: [{ price: '32.000', compareAt: '60.000' }] },
+          { id: 'o3', title: 'العرض الملكي | 5 عطور حجم 110مل + عطر مجاناً', handle: 'offer-royal', status: 'ACTIVE', variants: [{ price: '50.000', compareAt: '90.000' }] }];
+        S.locationId = 'l';
+      },
+      setPriority: wait, setPriorities: wait, addTags: wait, removeTags: wait, setStock: wait, setStatus: wait, destroy: wait,
+      addToCollection: wait, removeFromCollection: wait, updateBasics: wait, updatePrices: wait, setImage: wait,
+      async uploadImage(file) { await wait(); return URL.createObjectURL(file); },
+      async create(f) { await wait(); return { id: 'p' + Date.now(), title: f.title, handle: '', status: 'ACTIVE', type: f.type, tags: f.tags, english: f.english, priority: f.priority,
+        image: f.image || '', variants: f.sizes.map((s, i) => ({ id: 'nv' + Date.now() + i, title: s.name, price: s.price, compareAt: s.compareAt, qty: s.qty, invItem: 'i', tracked: true, loc: 'l' })), collections: [] }; }
+    };
+  })();
+
+  const api = DEMO ? demo : live;
+
+  /* ---------------- Derived state ---------------- */
+  function mode(arr) { const c = {}; arr.forEach(x => (c[x] = (c[x] || 0) + 1)); return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; }
+  const source = () => S.collections.find(c => c.handle === SOURCE_HANDLE);
+  const inStock = p => p.variants.some(v => !v.tracked || v.qty > 0);
+  const hidden = p => p.tags.includes(HIDE_TAG);
+  // Exactly the theme's rule (main-offer.liquid): every active perfume that is in stock and not hidden.
+  const visibleInOffers = p => p.status === 'ACTIVE' && inStock(p) && !hidden(p);
+  const byPriority = (a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.title.localeCompare(b.title, 'ar');
+  const active = () => S.products.filter(p => p.status !== 'ARCHIVED');
+  const categories = () => S.collections.filter(c => !SKIP_COLLECTIONS.includes(c.handle));
+
+  // How membership in a collection can be changed for this product.
+  function catControl(col) {
+    if (!col.smart) return { kind: 'manual' };
+    const tagRules = col.rules.filter(r => r.column === 'TAG' && r.relation === 'EQUALS');
+    if (tagRules.length && (col.any || col.rules.length === 1)) return { kind: 'tag', tag: tagRules[0].condition, tags: tagRules.map(r => r.condition) };
+    return { kind: 'auto' };
+  }
+  function matchesRule(p, r) {
+    const val = { TAG: null, TYPE: p.type, TITLE: p.title, VENDOR: p.vendor }[r.column];
+    if (r.column === 'TAG') return r.relation === 'EQUALS' ? p.tags.includes(r.condition) : r.relation === 'NOT_EQUALS' ? !p.tags.includes(r.condition) : null;
+    if (val == null) return null;
+    if (r.relation === 'EQUALS') return val === r.condition;
+    if (r.relation === 'NOT_EQUALS') return val !== r.condition;
+    if (r.relation === 'CONTAINS') return val.includes(r.condition);
+    if (r.relation === 'NOT_CONTAINS') return !val.includes(r.condition);
+    return null;
+  }
+  // Smart collections update on Shopify's side; mirror the result locally so the UI is right immediately.
+  function syncSmartCollections(p) {
+    S.collections.filter(c => c.smart).forEach(c => {
+      const res = c.rules.map(r => matchesRule(p, r));
+      if (res.some(x => x === null)) return;
+      const yes = c.any ? res.some(Boolean) : res.every(Boolean);
+      const has = p.collections.includes(c.id);
+      if (yes && !has) p.collections.push(c.id);
+      if (!yes && has) p.collections = p.collections.filter(id => id !== c.id);
+    });
+  }
+
+  /* ---------------- Rendering ---------------- */
+  const app = $('#app');
+
+  function render() {
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === S.tab));
+    ({ list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
+  }
+
+  function statusBadges(p) {
+    const b = [];
+    if (p.status === 'DRAFT') b.push('<span class="badge badge--draft">مسودة</span>');
+    b.push(inStock(p) ? '<span class="badge badge--ok">متوفر</span>' : '<span class="badge badge--out">خلص</span>');
+    if (hidden(p)) b.push('<span class="badge badge--hidden">مخفي من العروض</span>');
+    return b.join(' ');
+  }
+
+  function filtered() {
+    const q = S.q.trim().toLowerCase();
+    let list = active().filter(p => {
+      if (q && !(p.title.toLowerCase().includes(q) || p.english.toLowerCase().includes(q))) return false;
+      if (S.cat && !p.collections.includes(S.cat)) return false;
+      switch (S.filter) {
+        case 'shown': return visibleInOffers(p);
+        case 'out': return !inStock(p);
+        case 'hidden': return hidden(p);
+        case 'noprio': return p.priority == null;
+        default: return true;
+      }
+    });
+    const sorters = { priority: byPriority, name: (a, b) => a.title.localeCompare(b.title, 'ar'), stock: (a, b) => totalQty(a) - totalQty(b) };
+    return list.sort(sorters[S.sort]);
+  }
+  const totalQty = p => p.variants.reduce((s, v) => s + (v.tracked ? v.qty : 0), 0);
+
+  function renderList() {
+    const all = active();
+    const stats = [
+      ['all', 'كل العطور', all.length], ['shown', 'تظهر بالعروض', all.filter(visibleInOffers).length],
+      ['out', 'خلصت', all.filter(p => !inStock(p)).length], ['hidden', 'مخفية يدوياً', all.filter(hidden).length],
+      ['noprio', 'بدون أولوية', all.filter(p => p.priority == null).length]
+    ];
+    const list = filtered();
+    const rankMap = new Map(all.filter(visibleInOffers).sort(byPriority).map((p, i) => [p.id, i + 1]));
+    app.innerHTML = `
+      <div class="stats">${stats.map(([k, l, n]) => `<button class="stat" data-filter="${k}" aria-pressed="${S.filter === k}"><span class="muted small">${l}</span><b>${n}</b></button>`).join('')}</div>
+      <div class="card">
+        <div class="toolbar">
+          <input class="input grow" type="search" placeholder="ابحث بالاسم العربي أو الإنجليزي…" value="${esc(S.q)}" data-q>
+          <select class="input" style="width:auto" data-cat>
+            <option value="">كل التصنيفات</option>
+            ${categories().map(c => `<option value="${c.id}" ${S.cat === c.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}
+          </select>
+          <select class="input" style="width:auto" data-sort>
+            <option value="priority" ${S.sort === 'priority' ? 'selected' : ''}>ترتيب الزبون (الأولوية)</option>
+            <option value="name" ${S.sort === 'name' ? 'selected' : ''}>الاسم</option>
+            <option value="stock" ${S.sort === 'stock' ? 'selected' : ''}>الكمية (الأقل أولاً)</option>
+          </select>
+          <button class="btn btn--primary" data-add>+ إضافة عطر</button>
+          <button class="btn" data-renumber title="يعيد ترقيم الأولويات بالتسلسل مع الحفاظ على نفس الترتيب">إعادة ترقيم</button>
+        </div>
+        <div class="bulk ${S.selected.size ? 'is-on' : ''}">
+          <b>${S.selected.size} محدد</b>
+          <button class="btn btn--sm" data-bulk="show">إظهار في العروض</button>
+          <button class="btn btn--sm" data-bulk="hide">إخفاء من العروض</button>
+          <button class="btn btn--sm" data-bulk="out">تعليم «خلص»</button>
+          <button class="btn btn--sm" data-bulk="in">تعليم «متوفر»</button>
+          <button class="btn btn--sm" data-bulk="top">رفع للأعلى</button>
+          <button class="btn btn--sm btn--danger" data-bulk="archive">حذف (أرشفة)</button>
+          <button class="btn btn--sm" data-bulk="clear">إلغاء التحديد</button>
+        </div>
+        <div class="row row--head">
+          <span><input type="checkbox" data-selall ${list.length && list.every(p => S.selected.has(p.id)) ? 'checked' : ''} aria-label="تحديد الكل"></span>
+          <span>الترتيب</span><span></span><span>العطر</span><span>الأولوية</span><span>التصنيفات</span><span>الحالة</span><span></span>
+        </div>
+        ${list.length ? list.map(p => rowHtml(p, rankMap.get(p.id))).join('') : '<div class="empty">لا توجد عطور مطابقة</div>'}
+      </div>`;
+  }
+
+  function rowHtml(p, rank) {
+    const cats = categories().filter(c => p.collections.includes(c.id) && c.handle !== SOURCE_HANDLE);
+    const shown = visibleInOffers(p);
+    return `<div class="row ${shown ? '' : 'is-off'}" data-id="${p.id}">
+      <span class="c-sel"><input type="checkbox" data-sel ${S.selected.has(p.id) ? 'checked' : ''} aria-label="تحديد"></span>
+      <span class="c-rank rank" title="مكانه في قائمة الزبون">${rank ? '#' + rank : '–'}</span>
+      <span class="c-thumb">${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="" loading="lazy">` : '<span class="thumb"></span>'}</span>
+      <span class="c-name name"><b>${esc(p.title)}</b><span class="muted small">${esc(p.english)}</span></span>
+      <span class="c-prio prio">
+        <button class="icon-btn" data-move="up" title="قبل العطر الذي فوقه" aria-label="للأعلى">▲</button>
+        <input class="input" type="number" inputmode="numeric" value="${p.priority ?? ''}" placeholder="—" data-prio aria-label="الأولوية">
+        <button class="icon-btn" data-move="down" title="بعد العطر الذي تحته" aria-label="للأسفل">▼</button>
+      </span>
+      <span class="c-cats chips">${cats.map(c => `<span class="chip">${esc(c.title)}</span>`).join('') || '<span class="muted small">—</span>'}</span>
+      <span class="c-stock stock-cell">${statusBadges(p)}<span class="muted small">الكمية: ${p.variants.map(v => `${esc(v.title)} ${v.tracked ? v.qty : '∞'}`).join(' · ')}</span></span>
+      <span class="c-act actions">
+        <label class="switch" title="يظهر داخل العروض"><input type="checkbox" data-toggle-offer ${hidden(p) ? '' : 'checked'}><span></span></label>
+        <button class="btn btn--sm" data-stock>${inStock(p) ? 'خلص' : 'رجع متوفر'}</button>
+        <button class="btn btn--sm" data-edit>تعديل</button>
+      </span>
+    </div>`;
+  }
+
+  function renderPreview() {
+    const list = active().filter(visibleInOffers).sort(byPriority);
+    app.innerHTML = `<div class="card">
+      <div class="toolbar"><div><b>هكذا يرى الزبون قائمة الاختيار داخل العروض</b><div class="muted small">${list.length} عطر · الأعلى أولوية يظهر أولاً · العطور الخالصة والمخفية لا تظهر</div></div></div>
+      <div class="preview">${list.map((p, i) => `<figure>${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : '<img alt="">'}<figcaption><b>#${i + 1}</b> ${esc(p.title)}</figcaption></figure>`).join('')}</div>
+    </div>`;
+  }
+
+  function renderCats() {
+    const cats = categories();
+    app.innerHTML = `
+      <div class="note">التصنيفات هي المجموعات التي تظهر للزبائن في المتجر (عود، فانيلا، رجالي…). لإضافة عطر لتصنيف أو إزالته افتح «تعديل» على العطر.
+        المجموعات التلقائية تعتمد على الوسوم (Tags)، والتطبيق يضيف الوسم المناسب لك.</div>
+      <div class="card cat-list">
+        <div class="row row--head"><span>التصنيف</span><span>عدد العطور</span><span>طريقة الإضافة</span><span></span></div>
+        ${cats.map(c => {
+          const ctl = catControl(c);
+          const how = ctl.kind === 'manual' ? 'يدوي: تضيف العطور بنفسك' : ctl.kind === 'tag' ? `تلقائي بالوسم «${esc(ctl.tag)}»` : 'تلقائي بشروط أخرى (من إعدادات المجموعة)';
+          const n = active().filter(p => p.collections.includes(c.id)).length;
+          return `<div class="row"><span><b>${esc(c.title)}</b>${c.handle === SOURCE_HANDLE ? '<div class="muted small">مصدر قائمة العروض</div>' : ''}</span>
+            <span>${n}</span><span class="muted">${how}</span>
+            <span><button class="btn btn--sm" data-show-cat="${c.id}">عرض العطور</button></span></div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  function renderOffers() {
+    const n = active().filter(visibleInOffers).length;
+    app.innerHTML = `
+      <div class="note">كل العروض تعرض نفس قائمة العطور (${n} عطر متاح حالياً): كل عطور المتجر المتوفرة وغير المخفية، بترتيب الأولوية.</div>
+      <div class="card offer-list">
+        <div class="row row--head"><span>العرض</span><span>السعر</span><span>الحالة</span><span></span></div>
+        ${S.offers.filter(o => o.status !== 'ARCHIVED').map(o => {
+          const v = o.variants[0] || {};
+          return `<div class="row"><span><b>${esc(o.title)}</b></span>
+            <span>${Number(v.price || 0)} د.أ ${v.compareAt ? `<s class="muted small">${Number(v.compareAt)}</s>` : ''}</span>
+            <span>${o.status === 'ACTIVE' ? '<span class="badge badge--ok">فعّال</span>' : '<span class="badge badge--draft">غير منشور</span>'}</span>
+            <span class="actions"><button class="btn btn--sm" data-open-product="${o.id}">فتح في Shopify</button></span></div>`;
+        }).join('') || '<div class="empty">لا توجد عروض</div>'}
+      </div>`;
+  }
+
+  function renderArchive() {
+    const list = S.products.filter(p => p.status === 'ARCHIVED').sort((a, b) => a.title.localeCompare(b.title, 'ar'));
+    app.innerHTML = `
+      <div class="note">العطور المحذوفة تبقى هنا (مؤرشفة) ولا تظهر للزبائن. تقدر ترجعها بأي وقت، أو تحذفها نهائياً.</div>
+      <div class="card">${list.length ? list.map(p => `<div class="row" data-id="${p.id}" style="grid-template-columns:56px 1fr auto">
+        <span>${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="">` : '<span class="thumb"></span>'}</span>
+        <span class="name"><b>${esc(p.title)}</b><span class="muted small">${esc(p.english)}</span></span>
+        <span class="actions"><button class="btn btn--sm" data-restore>استرجاع</button><button class="btn btn--sm btn--danger" data-destroy>حذف نهائي</button></span>
+      </div>`).join('') : '<div class="empty">لا توجد عطور محذوفة</div>'}</div>`;
+  }
+
+  /* ---------------- Actions ---------------- */
+  const find = id => S.products.find(p => p.id === id);
+
+  async function run(label, fn) {
+    try { await fn(); if (label) toast(label); }
+    catch (e) { console.error(e); toast('حصل خطأ: ' + e.message, true); }
+    render();
+  }
+
+  async function savePriority(p, value) {
+    const old = p.priority;
+    p.priority = value;
+    try { await api.setPriority(p, value); toast('تم حفظ الأولوية'); }
+    catch (e) { p.priority = old; toast('لم تُحفظ الأولوية: ' + e.message, true); }
+    render();
+  }
+
+  // Swap places with the neighbour in the customer order.
+  async function move(p, dir) {
+    const list = active().sort(byPriority);
+    const i = list.indexOf(p);
+    const other = list[dir === 'up' ? i - 1 : i + 1];
+    if (!other) return;
+    const a = p.priority, b = other.priority;
+    if (a == null && b == null) return toast('أعطِ العطر رقم أولوية أولاً', true);
+    const changes = a != null && b != null && a !== b
+      ? [{ p, value: b }, { p: other, value: a }]
+      : [{ p, value: (b ?? a) + (dir === 'up' ? 1 : -1) }];
+    await applyPriorities(changes, 'تم تغيير الترتيب');
+  }
+
+  async function applyPriorities(list, label) {
+    const old = list.map(({ p }) => [p, p.priority]);
+    list.forEach(({ p, value }) => (p.priority = value));
+    render();
+    try { await api.setPriorities(list); toast(label); }
+    catch (e) { old.forEach(([p, v]) => (p.priority = v)); toast('لم يُحفظ الترتيب: ' + e.message, true); render(); }
+  }
+
+  async function renumber() {
+    const list = active().filter(p => p.priority != null).sort(byPriority);
+    if (!list.length) return;
+    if (!await confirmBox(`سيتم ترقيم ${list.length} عطر من 999 نزولاً بنفس الترتيب الحالي. متابعة؟`)) return;
+    const changes = list.map((p, i) => ({ p, value: 999 - i })).filter(({ p, value }) => p.priority !== value);
+    if (!changes.length) return toast('الترقيم مرتب أصلاً');
+    await applyPriorities(changes, 'تمت إعادة الترقيم');
+  }
+
+  async function toggleHidden(p, hide) {
+    await run(hide ? 'تم إخفاؤه من العروض' : 'صار يظهر في العروض', async () => {
+      if (hide) { await api.addTags(p, [HIDE_TAG]); p.tags.push(HIDE_TAG); }
+      else { await api.removeTags(p, [HIDE_TAG]); p.tags = p.tags.filter(t => t !== HIDE_TAG); }
+    });
+  }
+
+  async function setAvailability(p, available, qty) {
+    const map = new Map(p.variants.map(v => [v.id, available ? qty : 0]));
+    await run(available ? 'رجع متوفر' : 'تم تعليمه «خلص»', async () => {
+      await api.setStock(p, map);
+      p.variants.forEach(v => { v.qty = map.get(v.id); v.tracked = true; });
+    });
+  }
+
+  // Own confirm/prompt: native ones can be blocked inside the Shopify admin frame.
+  const askDlg = $('#ask');
+  function ask(msg, { input = null, danger = false } = {}) {
+    return new Promise(resolve => {
+      askDlg.innerHTML = `<form method="dialog"><div class="dlg-body"><p style="margin-top:0">${esc(msg)}</p>
+        ${input != null ? `<input class="input" type="number" min="0" name="v" value="${esc(input)}">` : ''}</div>
+        <div class="dlg-foot"><button class="btn ${danger ? 'btn--danger' : 'btn--primary'}" value="ok">تأكيد</button><button class="btn" value="cancel">إلغاء</button></div></form>`;
+      askDlg.onclose = () => {
+        if (askDlg.returnValue !== 'ok') return resolve(null);
+        resolve(input != null ? $('[name=v]', askDlg).value : true);
+      };
+      askDlg.returnValue = '';
+      askDlg.showModal();
+      $(input != null ? '[name=v]' : '[value=ok]', askDlg).focus();
+    });
+  }
+  const confirmBox = msg => ask(msg, { danger: true });
+  async function askQty() { const v = await ask('الكمية المتوفرة لكل حجم:', { input: '50' }); return v == null ? null : Math.max(0, parseInt(v, 10) || 0); }
+
+  async function bulk(action) {
+    const list = [...S.selected].map(find).filter(Boolean);
+    if (!list.length) return;
+    let qty = 50;
+    if (action === 'in') { qty = await askQty(); if (qty == null) return; }
+    if (action === 'archive' && !await confirmBox(`حذف ${list.length} عطر؟ سيتم نقلها إلى «المحذوفة» وتقدر ترجعها.`)) return;
+    if (action === 'clear') { S.selected.clear(); return render(); }
+    if (action === 'top') {
+      const max = Math.max(0, ...active().map(p => p.priority ?? 0));
+      return applyPriorities(list.map((p, i) => ({ p, value: max + list.length - i })), 'تم رفعها لأعلى القائمة');
+    }
+    let ok = 0;
+    for (const p of list) {
+      try {
+        if (action === 'hide' && !hidden(p)) { await api.addTags(p, [HIDE_TAG]); p.tags.push(HIDE_TAG); }
+        if (action === 'show' && hidden(p)) { await api.removeTags(p, [HIDE_TAG]); p.tags = p.tags.filter(t => t !== HIDE_TAG); }
+        if (action === 'out' || action === 'in') {
+          const map = new Map(p.variants.map(v => [v.id, action === 'in' ? qty : 0]));
+          await api.setStock(p, map); p.variants.forEach(v => { v.qty = map.get(v.id); v.tracked = true; });
+        }
+        if (action === 'archive') { await api.setStatus(p, 'ARCHIVED'); p.status = 'ARCHIVED'; }
+        ok++;
+      } catch (e) { toast(`${p.title}: ${e.message}`, true); }
+    }
+    S.selected.clear();
+    toast(`تم تحديث ${ok} من ${list.length}`);
+    render();
+  }
+
+  /* ---------------- Edit / add dialog ---------------- */
+  const dlg = $('#dlg');
+
+  function catChecks(p) {
+    return categories().map(c => {
+      const ctl = catControl(c);
+      const on = p ? p.collections.includes(c.id) : c.handle === SOURCE_HANDLE;
+      const dis = ctl.kind === 'auto';
+      return `<label title="${dis ? 'هذه المجموعة تلقائية بشروط لا يمكن تغييرها من هنا' : ''}"><input type="checkbox" name="cat" value="${c.id}" ${on ? 'checked' : ''} ${dis ? 'disabled' : ''}> ${esc(c.title)}</label>`;
+    }).join('');
+  }
+
+  function openEdit(p) {
+    const isNew = !p;
+    const sizes = isNew ? [{ name: '110ML', price: '15', compareAt: '', qty: 50 }, { name: '50ML', price: '11', compareAt: '', qty: 50 }]
+      : p.variants.map(v => ({ id: v.id, name: v.title, price: Number(v.price), compareAt: v.compareAt ? Number(v.compareAt) : '', qty: v.tracked ? v.qty : '' }));
+    const maxPrio = Math.max(0, ...active().map(x => x.priority ?? 0));
+    dlg.innerHTML = `<form method="dialog" data-form>
+      <div class="dlg-head"><h2 style="margin:0">${isNew ? 'إضافة عطر جديد' : 'تعديل: ' + esc(p.title)}</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
+      <div class="dlg-body">
+        <div class="grid2">
+          <div class="field"><label>الاسم بالعربي</label><input class="input" name="title" required value="${esc(p?.title)}"></div>
+          <div class="field"><label>الاسم بالإنجليزي (للبحث)</label><input class="input" name="english" dir="ltr" value="${esc(p?.english)}"></div>
+          <div class="field"><label>العائلة العطرية (النوع)</label>
+            <select class="input" name="type">${[...new Set([...FAMILIES, p?.type].filter(Boolean))].map(f => `<option ${p?.type === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
+          <div class="field"><label>الأولوية (الأعلى يظهر أولاً)</label><input class="input" type="number" name="priority" value="${isNew ? maxPrio + 1 : p.priority ?? ''}" placeholder="بدون"></div>
+        </div>
+        <div class="field"><label>التصنيفات التي يظهر فيها للزبائن</label><div class="checks">${catChecks(p)}</div></div>
+        ${isNew ? `<div class="field"><label>الجنس</label><div class="checks">${GENDERS.map((g, i) => `<label><input type="radio" name="gender" value="${g}" ${i === 0 ? 'checked' : ''}> ${g}</label>`).join('')}</div></div>` : ''}
+        <div class="field"><label>الأحجام والأسعار والكمية</label>
+          <table class="vtable"><thead><tr><th>الحجم</th><th>السعر</th><th>قبل الخصم</th><th>الكمية</th></tr></thead><tbody>
+          ${sizes.map((s, i) => `<tr data-size="${i}"><td>${isNew ? `<input class="input" name="sname" value="${esc(s.name)}" style="width:80px">` : esc(s.name)}</td>
+            <td><input class="input" name="price" type="number" step="0.5" min="0" value="${s.price}"></td>
+            <td><input class="input" name="compare" type="number" step="0.5" min="0" value="${s.compareAt}"></td>
+            <td><input class="input" name="qty" type="number" min="0" value="${s.qty}" placeholder="غير محدود"></td></tr>`).join('')}
+          </tbody></table>
+          <span class="muted small">الكمية 0 = «خلص» ولا يظهر في العروض.</span>
+        </div>
+        <div class="field"><label>${isNew ? 'صورة العطر' : 'تغيير الصورة (اختياري)'}</label>
+          <input class="input" type="file" name="image" accept="image/*">
+          ${p?.image ? `<img class="thumb" src="${esc(p.image)}" alt="" style="margin-top:6px">` : ''}</div>
+        <label class="checks" style="margin-bottom:4px"><label><input type="checkbox" name="show" ${p && hidden(p) ? '' : 'checked'}> يظهر داخل العروض</label></label>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn btn--primary" type="submit" data-save>${isNew ? 'إضافة العطر' : 'حفظ التعديلات'}</button>
+        <button class="btn" type="button" data-close>إلغاء</button>
+        ${isNew ? '' : '<button class="btn btn--danger" type="button" data-archive style="margin-inline-start:auto">حذف العطر</button>'}
+      </div>
+    </form>`;
+    dlg.showModal();
+    const form = $('[data-form]', dlg);
+    dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+    $('[data-archive]', dlg)?.addEventListener('click', async () => {
+      if (!await confirmBox(`حذف «${p.title}»؟ سينتقل إلى «المحذوفة» وتقدر ترجعه.`)) return;
+      dlg.close();
+      await run('تم حذف العطر (أرشفة)', async () => { await api.setStatus(p, 'ARCHIVED'); p.status = 'ARCHIVED'; });
+    });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = $('[data-save]', dlg);
+      btn.disabled = true; btn.textContent = 'جاري الحفظ…';
+      try {
+        await (isNew ? saveNew(form) : saveEdit(p, form));
+        dlg.close();
+      } catch (err) {
+        console.error(err);
+        toast('حصل خطأ: ' + err.message, true);
+        btn.disabled = false; btn.textContent = isNew ? 'إضافة العطر' : 'حفظ التعديلات';
+      }
+      render();
+    });
+  }
+
+  function readSizes(form) {
+    return [...form.querySelectorAll('[data-size]')].map(tr => ({
+      name: tr.querySelector('[name=sname]')?.value.trim(), price: tr.querySelector('[name=price]').value || '0',
+      compareAt: tr.querySelector('[name=compare]').value, qty: tr.querySelector('[name=qty]').value
+    }));
+  }
+
+  async function syncCategories(p, wanted) {
+    for (const c of categories()) {
+      const ctl = catControl(c);
+      const want = wanted.has(c.id), has = p.collections.includes(c.id);
+      if (want === has || ctl.kind === 'auto') continue;
+      if (ctl.kind === 'manual') {
+        if (want) await api.addToCollection(c.id, p); else await api.removeFromCollection(c.id, p);
+        p.collections = want ? [...p.collections, c.id] : p.collections.filter(id => id !== c.id);
+      } else if (want) {
+        await api.addTags(p, [ctl.tag]); p.tags.push(ctl.tag);
+      } else {
+        const rm = p.tags.filter(t => ctl.tags.includes(t));
+        await api.removeTags(p, rm); p.tags = p.tags.filter(t => !rm.includes(t));
+      }
+    }
+    syncSmartCollections(p);
+  }
+
+  async function saveEdit(p, form) {
+    const fd = new FormData(form);
+    const title = fd.get('title').trim(), english = fd.get('english').trim(), type = fd.get('type');
+    if (title !== p.title || english !== p.english || type !== p.type) {
+      await api.updateBasics(p, { title, type, english });
+      Object.assign(p, { title, english, type });
+    }
+    const prio = num(fd.get('priority'));
+    if (prio !== p.priority && prio != null) { await api.setPriority(p, prio); p.priority = prio; }
+
+    const sizes = readSizes(form);
+    const priceRows = [], stock = new Map();
+    p.variants.forEach((v, i) => {
+      const s = sizes[i];
+      if (Number(s.price) !== Number(v.price) || Number(s.compareAt || 0) !== Number(v.compareAt || 0)) priceRows.push({ id: v.id, price: s.price, compareAt: s.compareAt });
+      if (s.qty !== '' && (!v.tracked || Number(s.qty) !== v.qty)) stock.set(v.id, Math.max(0, parseInt(s.qty, 10) || 0));
+    });
+    await api.updatePrices(p, priceRows);
+    priceRows.forEach(r => Object.assign(p.variants.find(v => v.id === r.id), { price: r.price, compareAt: r.compareAt || null }));
+    if (stock.size) { await api.setStock(p, stock); p.variants.forEach(v => { if (stock.has(v.id)) { v.qty = stock.get(v.id); v.tracked = true; } }); }
+
+    const show = fd.get('show') === 'on';
+    if (show === hidden(p)) {
+      if (show) { await api.removeTags(p, [HIDE_TAG]); p.tags = p.tags.filter(t => t !== HIDE_TAG); }
+      else { await api.addTags(p, [HIDE_TAG]); p.tags.push(HIDE_TAG); }
+    }
+    await syncCategories(p, new Set(fd.getAll('cat')));
+
+    const file = fd.get('image');
+    if (file && file.size) { const src = await api.uploadImage(file); await api.setImage(p, src); if (DEMO) p.image = src; }
+    toast('تم حفظ التعديلات');
+  }
+
+  async function saveNew(form) {
+    const fd = new FormData(form);
+    const title = fd.get('title').trim();
+    if (active().some(p => p.title === title)) throw new Error('يوجد عطر بنفس الاسم');
+    const gender = fd.get('gender');
+    const sizes = readSizes(form).filter(s => s.name).map(s => ({ ...s, qty: s.qty === '' ? 0 : Math.max(0, parseInt(s.qty, 10) || 0) }));
+    if (!sizes.length) throw new Error('أضف حجماً واحداً على الأقل');
+    const wanted = new Set(fd.getAll('cat'));
+    // Tags drive the automatic categories, so put them on at creation time.
+    const tags = new Set(['عطر', gender, fd.get('type')]);
+    categories().forEach(c => { const ctl = catControl(c); if (wanted.has(c.id) && ctl.kind === 'tag') tags.add(ctl.tag); });
+    if (fd.get('show') !== 'on') tags.add(HIDE_TAG);
+    const file = fd.get('image');
+    const image = file && file.size ? await api.uploadImage(file) : null;
+    const p = await api.create({ title, english: fd.get('english').trim(), type: fd.get('type'), priority: num(fd.get('priority')), tags: [...tags], sizes, image });
+    syncSmartCollections(p);
+    for (const c of categories()) {
+      if (catControl(c).kind === 'manual' && wanted.has(c.id)) { await api.addToCollection(c.id, p); p.collections.push(c.id); }
+    }
+    S.products.push(p);
+    toast('تمت إضافة العطر');
+  }
+
+  /* ---------------- Events ---------------- */
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const t = e.target.closest('[data-tab]'); if (!t) return;
+    S.tab = t.dataset.tab; render();
+  });
+
+  app.addEventListener('input', e => {
+    if (e.target.matches('[data-q]')) {
+      S.q = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const q = $('[data-q]'); q.focus(); q.setSelectionRange(pos, pos);
+    }
+  });
+
+  app.addEventListener('change', e => {
+    const el = e.target, row = el.closest('[data-id]'), p = row && find(row.dataset.id);
+    if (el.matches('[data-cat]')) { S.cat = el.value; return render(); }
+    if (el.matches('[data-sort]')) { S.sort = el.value; return render(); }
+    if (el.matches('[data-selall]')) { filtered().forEach(x => (el.checked ? S.selected.add(x.id) : S.selected.delete(x.id))); return render(); }
+    if (!p) return;
+    if (el.matches('[data-sel]')) { el.checked ? S.selected.add(p.id) : S.selected.delete(p.id); return render(); }
+    if (el.matches('[data-prio]')) { const v = num(el.value); if (v !== p.priority && v != null) savePriority(p, v); }
+    if (el.matches('[data-toggle-offer]')) toggleHidden(p, !el.checked);
+  });
+
+  app.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-prio]')) e.target.blur(); });
+
+  app.addEventListener('click', async e => {
+    const el = e.target.closest('button'); if (!el) return;
+    const row = el.closest('[data-id]'), p = row && find(row.dataset.id);
+    if (el.dataset.filter) { S.filter = el.dataset.filter; return render(); }
+    if (el.matches('[data-add]')) return openEdit(null);
+    if (el.matches('[data-renumber]')) return renumber();
+    if (el.dataset.bulk) return bulk(el.dataset.bulk);
+    if (el.dataset.showCat) { S.tab = 'list'; S.cat = el.dataset.showCat; S.filter = 'all'; return render(); }
+    if (el.dataset.openProduct) {
+      const id = el.dataset.openProduct.split('/').pop();
+      return window.open(`shopify://admin/products/${id}`, '_top');
+    }
+    if (!p) return;
+    if (el.matches('[data-edit]')) return openEdit(p);
+    if (el.dataset.move) return move(p, el.dataset.move);
+    if (el.matches('[data-stock]')) {
+      if (inStock(p)) return setAvailability(p, false);
+      const qty = await askQty(); if (qty == null) return;
+      return setAvailability(p, true, qty);
+    }
+    if (el.matches('[data-restore]')) return run('تم استرجاع العطر', async () => { await api.setStatus(p, 'ACTIVE'); p.status = 'ACTIVE'; });
+    if (el.matches('[data-destroy]')) {
+      if (!await confirmBox(`حذف «${p.title}» نهائياً؟ لا يمكن التراجع عن هذا.`)) return;
+      return run('تم الحذف النهائي', async () => { await api.destroy(p); S.products = S.products.filter(x => x !== p); });
+    }
+  });
+
+  /* ---------------- Start ---------------- */
+  (async () => {
+    if (DEMO) $('#demo-bar').hidden = false;
+    try { await api.load(); render(); }
+    catch (e) {
+      console.error(e);
+      app.innerHTML = `<div class="card empty">تعذّر تحميل البيانات: ${esc(e.message)}<br><br><button class="btn" onclick="location.reload()">إعادة المحاولة</button></div>`;
+    }
+  })();
+})();
+</script>
+</body>
+</html>
