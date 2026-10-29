@@ -91,6 +91,11 @@
     .dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; z-index: 1; }
     .dlg-body { padding: 16px; }
     .dlg-foot { display: flex; justify-content: flex-start; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: #fff; }
+    .offer-media { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+    .offer-media figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+    .offer-media img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #eee; }
+    .offer-media figure div { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+    textarea.input { resize: vertical; }
     .vtable { width: 100%; border-collapse: collapse; }
     .vtable td, .vtable th { padding: 6px 4px; text-align: start; border-bottom: 1px solid var(--line); }
     .vtable input { width: 90px; }
@@ -316,6 +321,40 @@
       if (!up.ok) throw new Error('فشل رفع الصورة');
       return t.resourceUrl;
     },
+    async loadOfferDetails(o) {
+      const d = await gql(`query($id: ID!) { product(id: $id) {
+          media(first: 30) { nodes { id ... on MediaImage { image { url(transform: { maxWidth: 300 }) } } } }
+          config: metafield(namespace: "custom", key: "offer_config") { value } } }`, { id: o.id });
+      o.media = d.product.media.nodes.filter(m => m.image).map(m => ({ id: m.id, url: m.image.url }));
+      o.config = d.product.config ? JSON.parse(d.product.config.value) : null;
+    },
+    async saveOffer(o, f) {
+      check((await gql(`mutation($p: ProductUpdateInput!) { productUpdate(product: $p) { userErrors { message } } }`,
+        { p: { id: o.id, title: f.title, status: f.status } })).productUpdate);
+      const v = o.variants[0];
+      if (v) {
+        check((await gql(`mutation($pid: ID!, $v: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $pid, variants: $v) { userErrors { message } } }`,
+          { pid: o.id, v: [{ id: v.id, price: String(f.price), compareAtPrice: f.compareAt ? String(f.compareAt) : null }] })).productVariantsBulkUpdate);
+        Object.assign(v, { price: String(f.price), compareAt: f.compareAt || null });
+      }
+      check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
+        { m: [{ ownerId: o.id, namespace: 'custom', key: 'offer_config', type: 'json', value: JSON.stringify(f.config) }] })).metafieldsSet);
+      for (const file of f.files) await this.setImage(o, await this.uploadImage(file));
+      Object.assign(o, { title: f.title, status: f.status, config: f.config });
+    },
+    async deleteOfferMedia(o, mediaId) {
+      const d = await gql(`mutation($pid: ID!, $m: [ID!]!) { productDeleteMedia(productId: $pid, mediaIds: $m) { mediaUserErrors { message } } }`,
+        { pid: o.id, m: [mediaId] });
+      const errs = d.productDeleteMedia.mediaUserErrors;
+      if (errs.length) throw new Error(errs.map(e => e.message).join(' | '));
+    },
+    async makeOfferMediaMain(o, mediaId) {
+      const d = await gql(`mutation($id: ID!, $moves: [MoveInput!]!) { productReorderMedia(id: $id, moves: $moves) { mediaUserErrors { message } } }`,
+        { id: o.id, moves: [{ id: mediaId, newPosition: '0' }] });
+      const errs = d.productReorderMedia.mediaUserErrors;
+      if (errs.length) throw new Error(errs.map(e => e.message).join(' | '));
+      o.media = [o.media.find(m => m.id === mediaId), ...o.media.filter(m => m.id !== mediaId)];
+    },
     async setImage(p, source) {
       const d = await gql(`mutation($p: ProductUpdateInput!, $m: [CreateMediaInput!]) { productUpdate(product: $p, media: $m) { userErrors { message } } }`,
         { p: { id: p.id }, m: [{ originalSource: source, mediaContentType: 'IMAGE' }] });
@@ -366,13 +405,17 @@
               { id: 'v' + i + 'b', title: '50ML', price: '11.000', compareAt: null, qty: i === 7 ? 0 : 25, invItem: 'i', tracked: true, loc: 'l' }], collections: [] };
         });
         S.products.forEach(syncSmartCollections);
-        S.offers = [{ id: 'o1', title: 'العرض الكلاسيكي | 3 عطور حجم 50مل', handle: 'offer-classic', status: 'ACTIVE', variants: [{ price: '20.000', compareAt: '33.000' }] },
-          { id: 'o2', title: 'الأكثر طلباً | 3 عطور حجم 110مل + عطر 50مل مجاناً', handle: 'offer-strong', status: 'ACTIVE', variants: [{ price: '32.000', compareAt: '60.000' }] },
-          { id: 'o3', title: 'العرض الملكي | 5 عطور حجم 110مل + عطر مجاناً', handle: 'offer-royal', status: 'ACTIVE', variants: [{ price: '50.000', compareAt: '90.000' }] }];
+        S.offers = [{ id: 'o1', title: 'العرض الكلاسيكي | 3 عطور حجم 50مل', handle: 'offer-classic', type: 'عرض', status: 'ACTIVE', variants: [{ price: '20.000', compareAt: '33.000' }] },
+          { id: 'o2', title: 'الأكثر طلباً | 3 عطور حجم 110مل + عطر 50مل مجاناً', handle: 'offer-strong', type: 'عرض', status: 'ACTIVE', variants: [{ price: '32.000', compareAt: '60.000' }] },
+          { id: 'o3', title: 'العرض الملكي | 5 عطور حجم 110مل + عطر مجاناً', handle: 'offer-royal', type: 'عرض', status: 'ACTIVE', variants: [{ price: '50.000', compareAt: '90.000' }] }];
         S.locationId = 'l';
       },
       setPriority: wait, setPriorities: wait, addTags: wait, removeTags: wait, setStock: wait, setStatus: wait, destroy: wait,
       addToCollection: wait, removeFromCollection: wait, updateBasics: wait, updatePrices: wait, setImage: wait,
+      async loadOfferDetails(o) { await wait(); o.media = o.media || [{ id: 'm1', url: '' }, { id: 'm2', url: '' }]; },
+      async saveOffer(o, f) { await wait(); Object.assign(o, { title: f.title, status: f.status, config: f.config }); Object.assign(o.variants[0], { price: f.price, compareAt: f.compareAt }); },
+      async deleteOfferMedia(o, id) { await wait(); },
+      async makeOfferMediaMain(o, id) { await wait(); o.media = [o.media.find(m => m.id === id), ...o.media.filter(m => m.id !== id)]; },
       async uploadImage(file) { await wait(); return URL.createObjectURL(file); },
       async create(f) { await wait(); return { id: 'p' + Date.now(), title: f.title, handle: '', status: 'ACTIVE', type: f.type, tags: f.tags, english: f.english, priority: f.priority,
         image: f.image || '', variants: f.sizes.map((s, i) => ({ id: 'nv' + Date.now() + i, title: s.name, price: s.price, compareAt: s.compareAt, qty: s.qty, invItem: 'i', tracked: true, loc: 'l' })), collections: [] }; }
@@ -548,20 +591,119 @@
       </div>`;
   }
 
+  // Offer page settings. Saved as JSON in the offer's custom.offer_config metafield, which the
+  // theme's offer page reads. These defaults are what the theme shows when nothing is saved yet.
+  const OFFER_DEFAULTS = {
+    'offer-classic': { slot_size: '50', slot_count: 3, gift_slot: false, extra_1: '', extra_2: '', single_price: 11, upsell_handle: 'offer-strong', upsell_badge: 'ترقية موفرة ⭐', upsell_text: 'ضاعف الحجم إلى 110 مل مع عرض الأكثر طلباً (4 عطور) بـ {price} د.أ فقط بدلاً من {before} د.أ (وفّر {savings} د.أ)!', show_banner: false },
+    'offer-strong': { slot_size: '110', slot_count: 3, gift_slot: true, extra_1: 'تستر جيب قابل للتعبئة مجاناً', extra_2: 'توصيل مجاني لباب بيتك', single_price: 15, upsell_handle: 'offer-royal', upsell_badge: 'أعلى توفير 👑', upsell_text: 'احصل على العرض الفاخر (6 عطور 110 مل + هدية) بـ {price} د.أ فقط بدلاً من {before} د.أ (وفّر {savings} د.أ)!', show_banner: true },
+    'offer-royal': { slot_size: '110', slot_count: 5, gift_slot: true, extra_1: 'تستر جيب قابل للتعبئة مجاناً', extra_2: 'توصيل مجاني لباب بيتك', single_price: 15, upsell_handle: '', upsell_badge: '', upsell_text: '', show_banner: true }
+  };
+  const BASE_CONFIG = { slot_size: '110', slot_count: 3, gift_slot: true, extra_1: '', extra_2: '', single_price: 15, rating: '4.9/5', trust_count: '150',
+    show_countdown: true, show_banner: true, upsell_handle: '', upsell_badge: '', upsell_text: '' };
+  const offerConfig = o => ({ ...BASE_CONFIG, ...(OFFER_DEFAULTS[o.handle] || {}), ...(o.config || {}) });
+
   function renderOffers() {
     const n = active().filter(visibleInOffers).length;
+    const list = S.offers.filter(o => o.status !== 'ARCHIVED' && o.type === 'عرض');
     app.innerHTML = `
-      <div class="note">كل العروض تعرض نفس قائمة العطور (${n} عطر متاح حالياً): كل عطور المتجر المتوفرة وغير المخفية، بترتيب الأولوية.</div>
+      <div class="note">من هون بتعدّل كل اشي بصفحة العرض: الاسم، السعر، الصور، عدد العطور وحجمها، الهدية، اللي بينضاف تلقائياً، وبطاقة الترقية.
+        كل العروض بتعرض نفس قائمة العطور (${n} عطر متاح حالياً).</div>
       <div class="card offer-list">
         <div class="row row--head"><span>العرض</span><span>السعر</span><span>الحالة</span><span></span></div>
-        ${S.offers.filter(o => o.status !== 'ARCHIVED').map(o => {
+        ${list.map(o => {
           const v = o.variants[0] || {};
-          return `<div class="row"><span><b>${esc(o.title)}</b></span>
+          const c = offerConfig(o);
+          return `<div class="row" data-offer-id="${o.id}"><span><b>${esc(o.title)}</b><div class="muted small">${c.slot_count} × ${c.slot_size} مل${c.gift_slot ? ' + هدية 50 مل' : ''}</div></span>
             <span>${Number(v.price || 0)} د.أ ${v.compareAt ? `<s class="muted small">${Number(v.compareAt)}</s>` : ''}</span>
-            <span>${o.status === 'ACTIVE' ? '<span class="badge badge--ok">فعّال</span>' : '<span class="badge badge--draft">غير منشور</span>'}</span>
-            <span class="actions"><button class="btn btn--sm" data-open-product="${o.id}">فتح في Shopify</button></span></div>`;
+            <span>${o.status === 'ACTIVE' ? '<span class="badge badge--ok">فعّال</span>' : '<span class="badge badge--draft">مخفي</span>'}</span>
+            <span class="actions"><button class="btn btn--sm btn--primary" data-edit-offer="${o.id}">تعديل العرض</button></span></div>`;
         }).join('') || '<div class="empty">لا توجد عروض</div>'}
       </div>`;
+  }
+
+  async function openOfferEdit(o) {
+    dlg.innerHTML = '<div class="dlg-body loading">جاري تحميل العرض…</div>';
+    dlg.showModal();
+    try { await api.loadOfferDetails(o); } catch (e) { dlg.close(); return toast('تعذّر تحميل العرض: ' + e.message, true); }
+    const v = o.variants[0] || {};
+    const c = offerConfig(o);
+    const others = S.offers.filter(x => x.type === 'عرض' && x.id !== o.id && x.status !== 'ARCHIVED');
+    const check = (name, on, label) => `<label><input type="checkbox" name="${name}" ${on ? 'checked' : ''}> ${label}</label>`;
+    dlg.innerHTML = `<form method="dialog" data-offer-form>
+      <div class="dlg-head"><h2 style="margin:0">تعديل: ${esc(o.title)}</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
+      <div class="dlg-body">
+        <div class="field"><label>اسم العرض</label><input class="input" name="title" required value="${esc(o.title)}"></div>
+        <div class="grid2">
+          <div class="field"><label>السعر (د.أ)</label><input class="input" type="number" step="0.5" min="0" name="price" value="${Number(v.price || 0)}"></div>
+          <div class="field"><label>السعر قبل الخصم</label><input class="input" type="number" step="0.5" min="0" name="compare" value="${v.compareAt ? Number(v.compareAt) : ''}"></div>
+        </div>
+        <div class="checks" style="margin-bottom:12px">${check('active', o.status === 'ACTIVE', 'العرض ظاهر للزبائن')}</div>
+
+        <div class="field"><label>الصور (الأولى هي الصورة الرئيسية)</label>
+          <div class="offer-media">${(o.media || []).map((m, i) => `<figure data-media="${m.id}"><img src="${esc(m.url)}" alt="">
+            <div>${i ? `<button type="button" class="btn btn--sm" data-media-main="${m.id}">رئيسية</button>` : '<span class="badge badge--ok">رئيسية</span>'}
+            <button type="button" class="btn btn--sm btn--danger" data-media-del="${m.id}">حذف</button></div></figure>`).join('') || '<span class="muted small">لا توجد صور</span>'}</div>
+          <input class="input" type="file" name="images" accept="image/*" multiple style="margin-top:8px">
+          <span class="muted small">اختر صورة أو أكثر لإضافتها عند الحفظ.</span></div>
+
+        <h2 style="margin:18px 0 8px">إعدادات صفحة العرض</h2>
+        <div class="grid2">
+          <div class="field"><label>عدد العطور المدفوعة</label><input class="input" type="number" min="1" max="8" name="slot_count" value="${c.slot_count}"></div>
+          <div class="field"><label>حجم العطور</label><select class="input" name="slot_size"><option value="50" ${c.slot_size == '50' ? 'selected' : ''}>50 مل</option><option value="110" ${c.slot_size == '110' ? 'selected' : ''}>110 مل</option></select></div>
+          <div class="field"><label>سعر العطر الواحد بدون العرض (لسطر «بمعدل…»)</label><input class="input" type="number" min="0" name="single_price" value="${c.single_price}"></div>
+          <div class="field"><label>التقييم / عدد العملاء</label><div style="display:flex;gap:6px"><input class="input" name="rating" value="${esc(c.rating)}"><input class="input" name="trust_count" value="${esc(c.trust_count)}"></div></div>
+        </div>
+        <div class="checks" style="margin-bottom:12px">
+          ${check('gift_slot', c.gift_slot, 'خانة هدية (عطر 50 مل مجاناً)')}
+          ${check('show_banner', c.show_banner, 'بانر الهدية/الشحن المجاني')}
+          ${check('show_countdown', c.show_countdown, 'عداد «العرض ينتهي خلال»')}
+        </div>
+        <div class="field"><label>يُضاف لطلبك تلقائياً (اتركهم فارغين لإخفاء الصندوق)</label>
+          <input class="input" name="extra_1" value="${esc(c.extra_1)}" placeholder="مثلاً: تستر جيب قابل للتعبئة مجاناً">
+          <input class="input" name="extra_2" value="${esc(c.extra_2)}" placeholder="مثلاً: توصيل مجاني لباب بيتك" style="margin-top:6px"></div>
+        <div class="field"><label>بطاقة الترقية</label>
+          <select class="input" name="upsell_handle"><option value="">بدون بطاقة ترقية</option>
+            ${others.map(x => `<option value="${esc(x.handle)}" ${c.upsell_handle === x.handle ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select>
+          <input class="input" name="upsell_badge" value="${esc(c.upsell_badge)}" placeholder="الشارة، مثلاً: ترقية موفرة ⭐" style="margin-top:6px">
+          <textarea class="input" name="upsell_text" rows="2" style="margin-top:6px" placeholder="النص">${esc(c.upsell_text)}</textarea>
+          <span class="muted small">بالنص فيك تستخدم {price} و{before} و{savings} وبتنحسب من العرض المختار.</span></div>
+      </div>
+      <div class="dlg-foot"><button class="btn btn--primary" type="submit" data-save>حفظ</button><button class="btn" type="button" data-close>إلغاء</button>
+        <a class="btn" style="margin-inline-start:auto" href="https://a00jj0-ve.myshopify.com/products/${esc(o.handle)}" target="_blank" rel="noopener">معاينة الصفحة ↗</a></div>
+    </form>`;
+    const form = $('[data-offer-form]', dlg);
+    dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+    dlg.querySelectorAll('[data-media-del]').forEach(b => b.addEventListener('click', async () => {
+      if (!await confirmBox('حذف هذه الصورة من العرض؟')) return;
+      try { await api.deleteOfferMedia(o, b.dataset.mediaDel); o.media = o.media.filter(m => m.id !== b.dataset.mediaDel); toast('تم حذف الصورة'); openOfferEdit(o); }
+      catch (e) { toast('حصل خطأ: ' + e.message, true); }
+    }));
+    dlg.querySelectorAll('[data-media-main]').forEach(b => b.addEventListener('click', async () => {
+      try { await api.makeOfferMediaMain(o, b.dataset.mediaMain); toast('صارت الصورة الرئيسية'); openOfferEdit(o); }
+      catch (e) { toast('حصل خطأ: ' + e.message, true); }
+    }));
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = $('[data-save]', dlg); btn.disabled = true; btn.textContent = 'جاري الحفظ…';
+      const fd = new FormData(form);
+      const config = {
+        slot_size: fd.get('slot_size'), slot_count: Math.max(1, parseInt(fd.get('slot_count'), 10) || 1), gift_slot: fd.get('gift_slot') === 'on',
+        extra_1: fd.get('extra_1').trim(), extra_2: fd.get('extra_2').trim(), single_price: Number(fd.get('single_price')) || 0,
+        rating: fd.get('rating').trim(), trust_count: fd.get('trust_count').trim(), show_countdown: fd.get('show_countdown') === 'on',
+        show_banner: fd.get('show_banner') === 'on', upsell_handle: fd.get('upsell_handle'), upsell_badge: fd.get('upsell_badge').trim(),
+        upsell_text: fd.get('upsell_text').trim()
+      };
+      try {
+        await api.saveOffer(o, { title: fd.get('title').trim(), status: fd.get('active') === 'on' ? 'ACTIVE' : 'DRAFT',
+          price: fd.get('price'), compareAt: fd.get('compare'), config, files: [...form.querySelector('[name=images]').files] });
+        toast('تم حفظ العرض');
+        dlg.close();
+      } catch (err) {
+        console.error(err); toast('حصل خطأ: ' + err.message, true);
+        btn.disabled = false; btn.textContent = 'حفظ';
+      }
+      render();
+    });
   }
 
   function renderArchive() {
@@ -876,10 +1018,7 @@
     if (el.matches('[data-renumber]')) return renumber();
     if (el.dataset.bulk) return bulk(el.dataset.bulk);
     if (el.dataset.showCat) { S.tab = 'list'; S.cat = el.dataset.showCat; S.filter = 'all'; return render(); }
-    if (el.dataset.openProduct) {
-      const id = el.dataset.openProduct.split('/').pop();
-      return window.open(`shopify://admin/products/${id}`, '_top');
-    }
+    if (el.dataset.editOffer) return openOfferEdit(S.offers.find(o => o.id === el.dataset.editOffer));
     if (!p) return;
     if (el.matches('[data-edit]')) return openEdit(p);
     if (el.dataset.move) return move(p, el.dataset.move);
