@@ -112,6 +112,15 @@
     .loading { padding: 60px; text-align: center; color: var(--muted); }
     .demo-bar { background: var(--warn-soft); color: var(--warn); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
 
+    .order { padding: 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+    .order:last-child { border-bottom: 0; }
+    .order__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .order__items { white-space: pre-line; font-size: 13px; background: #fafbf9; border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
+    .order__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .code { direction: ltr; text-align: left; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre; overflow: auto; max-height: 220px; }
+    .steps { margin: 0 0 12px; padding-inline-start: 20px; font-size: 13px; }
+    .steps li { margin-bottom: 4px; }
+
     /* Phones: each perfume becomes a compact card */
     @media (max-width: 860px) {
       .stats { grid-template-columns: repeat(3, 1fr); }
@@ -144,6 +153,7 @@
       <div class="muted small">ترتيب العطور كما يراها الزبون داخل العروض، والمتوفر والخالص، والتصنيفات</div>
     </div>
     <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="orders">الطلبات</button>
       <button class="tab" role="tab" data-tab="list" aria-selected="true">العطور</button>
       <button class="tab" role="tab" data-tab="preview">معاينة ترتيب الزبون</button>
       <button class="tab" role="tab" data-tab="cats">التصنيفات</button>
@@ -175,7 +185,8 @@
   const DEMO = !(params.has('host') || params.has('shop'));
 
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
-              priorityType: 'number_integer', tab: 'list', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set() };
+              priorityType: 'number_integer', tab: 'list', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(),
+              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null };
 
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -391,6 +402,17 @@
         check(pub.publishablePublish);
       }
       return mapProduct(prod);
+    },
+    async loadOrders() {
+      const d = await gql(`{ shop { id settings: metafield(namespace: "custom", key: "order_messages") { value } }
+        orders(first: 60, sortKey: CREATED_AT, reverse: true) { nodes { ${ORDER_FIELDS} } } }`);
+      S.shopId = d.shop.id;
+      S.orderSettings = { ...ORDER_DEFAULTS, ...(d.shop.settings ? JSON.parse(d.shop.settings.value) : {}) };
+      S.orders = d.orders.nodes.map(mapOrder);
+    },
+    async saveOrderSettings(v) {
+      check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
+        { m: [{ ownerId: S.shopId, namespace: 'custom', key: 'order_messages', type: 'json', value: JSON.stringify(v) }] })).metafieldsSet);
     }
   };
 
@@ -427,7 +449,24 @@
       async makeOfferMediaMain(o, id) { await wait(); o.media = [o.media.find(m => m.id === id), ...o.media.filter(m => m.id !== id)]; },
       async uploadImage(file) { await wait(); return URL.createObjectURL(file); },
       async create(f) { await wait(); return { id: 'p' + Date.now(), title: f.title, handle: '', status: 'ACTIVE', type: f.type, tags: f.tags, english: f.english, priority: f.priority,
-        image: f.image || '', variants: f.sizes.map((s, i) => ({ id: 'nv' + Date.now() + i, title: s.name, price: s.price, compareAt: s.compareAt, qty: s.qty, invItem: 'i', tracked: true, loc: 'l' })), collections: [] }; }
+        image: f.image || '', variants: f.sizes.map((s, i) => ({ id: 'nv' + Date.now() + i, title: s.name, price: s.price, compareAt: s.compareAt, qty: s.qty, invItem: 'i', tracked: true, loc: 'l' })), collections: [] }; },
+      async loadOrders() {
+        await wait();
+        S.shopId = 's';
+        S.orderSettings = S.orderSettings || { ...ORDER_DEFAULTS };
+        const li = (title, price, attrs = []) => ({ title, quantity: 1, originalUnitPriceSet: { shopMoney: { amount: price } }, customAttributes: attrs.map(([key, value]) => ({ key, value })) });
+        const order = (i, tags, first, last, phone, city, addr, items, total) => ({ id: 'ord' + i, name: '#' + (1040 + i), createdAt: new Date(Date.now() - i * 36e5 * 5).toISOString(),
+          cancelledAt: null, tags, note: '', displayFulfillmentStatus: 'UNFULFILLED', totalPriceSet: { shopMoney: { amount: total } }, phone: null, customer: null,
+          shippingAddress: { firstName: first, lastName: last, phone, address1: addr, address2: '', city }, lineItems: { nodes: items } });
+        S.orders = [
+          order(1, [], 'محمد', 'عبابنة', '0791234567', 'عمان', 'خلدا - قرب دوار الدلة', [li('الأكثر طلباً | 3 عطور حجم 110مل + عطر 50مل مجاناً', '32.00',
+            [['العطر الأول (110 مل)', 'سوفاج ديور'], ['العطر الثاني (110 مل)', 'ليتون دي مارلي'], ['العطر الثالث (110 مل)', 'خمرة قهوة'], ['عطر مجاني هدية (50 مل)', 'يارا لطافة']])], '32.00'),
+          order(2, ['رسالة-التأكيد-انبعتت'], 'لينا', 'الطراونة', '+962 77 555 1234', 'إربد', 'شارع الجامعة', [li('العرض الكلاسيكي | 3 عطور حجم 50مل', '20.00',
+            [['العطر الأول (50 مل)', 'ديلينا دي مارلي'], ['العطر الثاني (50 مل)', 'كيالي مارشميلو'], ['العطر الثالث (50 مل)', 'بلاك اوبيوم واي إس إل']])], '20.00'),
+          order(3, ['مؤكد'], 'Ali', 'Aldababseh', '0785550000', 'الزرقاء', 'الزرقاء الجديدة', [li('سوفاج ديور', '15.00')], '15.00')
+        ].map(mapOrder);
+      },
+      async saveOrderSettings() { await wait(); }
     };
   })();
 
@@ -478,7 +517,7 @@
 
   function render() {
     document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === S.tab));
-    ({ list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
+    ({ orders: renderOrders, list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
   }
 
   function statusBadges(p) {
@@ -735,6 +774,230 @@
         btn.disabled = false; btn.textContent = 'حفظ';
       }
       render();
+    });
+  }
+
+  /* ---------------- Orders & WhatsApp ---------------- */
+  // Messages go out from the shop's own number: the app opens WhatsApp with the text ready and the
+  // owner presses send. Progress is kept as order tags; confirmed orders are posted to a Google Sheet
+  // through an Apps Script web app (settings live in the shop's custom.order_messages metafield).
+  const TAG_SENT = 'رسالة-التأكيد-انبعتت';
+  const TAG_CONFIRMED = 'مؤكد';
+  const ORDER_DEFAULTS = {
+    new_order: 'السلام عليكم ،[وقت التحية] [اسم العميل] 🌹\n\nفي عندك اوردر من عطور عصفور تفاصيله\n\n[تفاصيل العطور]\n\nسعر الاوردر شامل التوصيل : *[المبلغ]*\n\nالعنوان : [العنوان]\n\nالعطور بتيجي بزجاجنا الخاص \n[موعد التوصيل]\n\nبتحب نأكد الطلب ؟',
+    confirmed: 'تم تأكيد طلبك بنجاح من عطور عصفور 👑✨\n\nطلبك الآن قيد التجهيز بعناية، و[موعد التوصيل]\nإذا كان لديك أي استفسار أو تعديل نحن دائماً بخدمتك.\nشكراً لاختيارك وثقتك بعطور عصفور 🕊️',
+    sheet_url: '', secret: ''
+  };
+  const ORDER_STATES = { new: ['جديد', 'badge--draft'], sent: ['بانتظار رد الزبون', 'badge--hidden'], confirmed: ['مؤكد', 'badge--ok'], cancelled: ['ملغي', 'badge--out'] };
+  const ORDER_FIELDS = `id name createdAt cancelledAt tags note
+    totalPriceSet { shopMoney { amount } } phone
+    customer { firstName lastName phone }
+    shippingAddress { firstName lastName phone address1 address2 city }
+    lineItems(first: 50) { nodes { title quantity originalUnitPriceSet { shopMoney { amount } } customAttributes { key value } } }`;
+
+  function mapOrder(n) {
+    const a = n.shippingAddress || {}, c = n.customer || {};
+    return {
+      id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '',
+      total: Number(n.totalPriceSet.shopMoney.amount),
+      customer: [a.firstName || c.firstName, a.lastName || c.lastName].filter(Boolean).join(' ') || 'زبون',
+      phone: a.phone || n.phone || c.phone || '', city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' - '),
+      // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
+      items: n.lineItems.nodes.map(li => ({ title: li.title, qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount),
+        props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key)).map(x => x.value) }))
+    };
+  }
+  const orderState = o => (o.cancelled ? 'cancelled' : o.tags.includes(TAG_CONFIRMED) ? 'confirmed' : o.tags.includes(TAG_SENT) ? 'sent' : 'new');
+  const jod = n => `${n.toFixed(2)} د.أ.`;
+
+  const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  function ammanNow() {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Amman', weekday: 'short', hour: 'numeric', hourCycle: 'h23' })
+      .formatToParts(new Date()).map(x => [x.type, x.value]));
+    return { day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), hour: Number(p.hour) };
+  }
+  // Delivery is the next day, except that nothing goes out on Friday.
+  function deliveryText() {
+    const next = (ammanNow().day + 1) % 7;
+    return next === 5 ? 'التوصيل بكون السبت أو الأحد بإذن الله (لأن يوم الجمعة عطلة) 🌹' : `التوصيل بكون بكرا ${DAYS[next]} بإذن الله 🌹`;
+  }
+  function itemsText(o, wa = true) {
+    const b = wa ? '*' : '';
+    return o.items.map(li => [`• ${li.title}${li.qty > 1 ? ` × ${li.qty}` : ''} — ${b}${jod(li.price * li.qty)}${b}`, ...li.props.map(v => `   ◦ ${v}`)].join('\n')).join('\n');
+  }
+  function fillMessage(tpl, o) {
+    const vars = { 'وقت التحية': ammanNow().hour < 12 ? 'صباح الخير' : 'مساء الخير', 'اسم العميل': o.customer, 'تفاصيل العطور': itemsText(o),
+      'المبلغ': jod(o.total), 'العنوان': [o.city, o.address].filter(Boolean).join(' / '), 'موعد التوصيل': deliveryText(), 'رقم الطلب': o.name.replace('#', '') };
+    return tpl.replace(/\[([^\]]+)\]/g, (m, k) => vars[k] ?? m);
+  }
+  // Jordanian numbers come as 07…, +962…, 00962… or 7…; wa.me wants 9627… digits only.
+  function waPhone(raw) {
+    let d = String(raw || '').replace(/\D/g, '');
+    if (d.startsWith('00')) d = d.slice(2);
+    if (d.startsWith('0')) d = '962' + d.slice(1);
+    else if (d.length === 9 && d.startsWith('7')) d = '962' + d;
+    return d;
+  }
+  // Must run synchronously inside the click, or the browser blocks the new window.
+  function openWhatsApp(o, text) {
+    const phone = waPhone(o.phone);
+    if (!phone) { toast('ما في رقم هاتف على هذا الطلب', true); return false; }
+    const a = document.createElement('a');
+    a.href = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    return true;
+  }
+
+  async function postToSheet(o) {
+    const st = S.orderSettings;
+    const body = JSON.stringify({ secret: st.secret, order: o.name, date: new Date(o.createdAt).toLocaleString('en-GB', { timeZone: 'Asia/Amman' }),
+      customer: o.customer, phone: o.phone, city: o.city, address: o.address, items: itemsText(o, false), total: o.total, note: o.note });
+    if (DEMO) return;
+    // text/plain keeps it a simple request (no CORS preflight, which Apps Script can't answer).
+    let res;
+    try { res = await fetch(st.sheet_url, { method: 'POST', body }); }
+    catch { await fetch(st.sheet_url, { method: 'POST', body, mode: 'no-cors' }); return; }  // the script skips duplicates
+    const j = await res.json().catch(() => ({ ok: res.ok }));
+    if (!j.ok) throw new Error(j.error || 'الشيت رفض الطلب، تأكد من الرابط والرمز');
+  }
+
+  async function loadOrders() {
+    if (S.ordersLoading) return;
+    S.ordersLoading = true;
+    try { await api.loadOrders(); }
+    catch (e) {
+      console.error(e);
+      S.orders = null;
+      const scope = /access|scope|approved|protected/i.test(e.message);
+      if (S.tab === 'orders') app.innerHTML = `<div class="card empty">تعذّر تحميل الطلبات: ${esc(e.message)}
+        ${scope ? '<br><br>التطبيق محتاج صلاحية قراءة الطلبات وبيانات الزبائن. افتح التطبيق من جديد ووافق على التحديث.' : ''}
+        <br><br><button class="btn" data-oreload>إعادة المحاولة</button></div>`;
+      return;
+    } finally { S.ordersLoading = false; }
+    if (S.tab === 'orders') render();
+  }
+
+  function renderOrders() {
+    if (!S.orders) { app.innerHTML = '<div class="loading">جاري تحميل الطلبات…</div>'; loadOrders(); return; }
+    const counts = {};
+    S.orders.forEach(o => (counts[orderState(o)] = (counts[orderState(o)] || 0) + 1));
+    const list = S.orders.filter(o => S.orderFilter === 'all' || orderState(o) === S.orderFilter);
+    app.innerHTML = `
+      ${S.orderSettings.sheet_url ? '' : '<div class="note note--warn">لسا ما ربطت جوجل شيت. اكبس «الإعدادات» وتابع الخطوات عشان الطلبات المؤكدة تنرفع عليه.</div>'}
+      <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+        ${['new', 'sent', 'confirmed', 'all'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
+          <b>${k === 'all' ? S.orders.length : counts[k] || 0}</b>${k === 'all' ? 'كل الطلبات' : ORDER_STATES[k][0]}</button>`).join('')}
+      </div>
+      <div class="card">
+        <div class="toolbar"><span class="grow muted small">آخر ${S.orders.length} طلب. «رسالة التأكيد» بتفتح الواتساب والرسالة جاهزة، وإنت بتكبس إرسال.</span>
+          <button class="btn btn--sm" data-oreload>تحديث</button><button class="btn btn--sm" data-osettings>الإعدادات</button></div>
+        ${list.map(orderRow).join('') || '<div class="empty">ما في طلبات هون</div>'}
+      </div>`;
+  }
+
+  function orderRow(o) {
+    const st = orderState(o), [label, cls] = ORDER_STATES[st];
+    const date = new Date(o.createdAt).toLocaleString('ar-JO', { timeZone: 'Asia/Amman', day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const buttons = st === 'cancelled' ? '' : `<button class="btn btn--sm" data-oact="send">📩 ${st === 'new' ? 'رسالة التأكيد' : 'إعادة الرسالة'}</button>
+      ${st === 'confirmed' ? '<button class="btn btn--sm" data-oact="unconfirm">تراجع عن التأكيد</button>' : '<button class="btn btn--sm btn--primary" data-oact="confirm">✅ تم التأكيد</button>'}`;
+    return `<div class="order" data-order-id="${o.id}">
+      <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span><span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
+      <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
+      ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
+      <div class="order__items">${esc(itemsText(o, false))}</div>
+      <div class="order__foot"><b>${jod(o.total)}</b><span class="actions">${buttons}</span></div>
+    </div>`;
+  }
+
+  async function orderAction(o, act) {
+    const st = S.orderSettings;
+    if (act === 'send') {
+      if (!openWhatsApp(o, fillMessage(st.new_order, o)) || o.tags.includes(TAG_SENT)) return;
+      return run('', async () => { await api.addTags(o, [TAG_SENT]); o.tags.push(TAG_SENT); });
+    }
+    if (act === 'confirm') {
+      openWhatsApp(o, fillMessage(st.confirmed, o));
+      return run(st.sheet_url ? 'تم التأكيد وانرفع الطلب على الشيت' : 'تم التأكيد (الشيت مش مربوط، اربطه من الإعدادات)', async () => {
+        if (st.sheet_url) await postToSheet(o);
+        await api.addTags(o, [TAG_CONFIRMED]); o.tags.push(TAG_CONFIRMED);
+      });
+    }
+    if (act === 'unconfirm') {
+      if (!await confirmBox(`إرجاع ${o.name} لغير مؤكد؟ السطر اللي على الشيت بضل، احذفه يدوي إذا بدك.`)) return;
+      return run('رجع الطلب لغير مؤكد', async () => { await api.removeTags(o, [TAG_CONFIRMED]); o.tags = o.tags.filter(t => t !== TAG_CONFIRMED); });
+    }
+  }
+
+  const appsScript = secret => `// عطور عصفور: استقبال الطلبات المؤكدة من تطبيق مدير العروض
+const SECRET = '${secret}';
+const HEADERS = ['رقم الطلب', 'تاريخ الطلب', 'الاسم', 'الهاتف', 'المدينة', 'العنوان', 'العطور', 'المبلغ', 'ملاحظة', 'وقت التأكيد'];
+
+function doPost(e) {
+  const d = JSON.parse(e.postData.contents);
+  if (d.secret !== SECRET) return reply({ ok: false, error: 'رمز غير صحيح' });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+    if (sh.getLastRow() === 0) sh.appendRow(HEADERS);
+    const done = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().flat().map(String);
+    if (done.includes(d.order)) return reply({ ok: true, duplicate: true });
+    sh.appendRow([d.order, d.date, d.customer, "'" + d.phone, d.city, d.address, d.items, d.total, d.note, new Date()]);
+    return reply({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reply(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+  function openOrderSettings() {
+    const st = S.orderSettings;
+    const secret = st.secret || [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, '0')).join('');
+    const vars = '[وقت التحية] [اسم العميل] [تفاصيل العطور] [المبلغ] [العنوان] [موعد التوصيل] [رقم الطلب]';
+    dlg.innerHTML = `<form method="dialog" data-osettings-form>
+      <div class="dlg-head"><h2 style="margin:0">إعدادات الطلبات والواتساب</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
+      <div class="dlg-body">
+        <div class="field"><label>رسالة التأكيد (أول ما يطلب الزبون)</label><textarea class="input" name="new_order" rows="9">${esc(st.new_order)}</textarea></div>
+        <div class="field"><label>رسالة «تم تأكيد طلبك»</label><textarea class="input" name="confirmed" rows="6">${esc(st.confirmed)}</textarea>
+          <span class="muted small">المتغيرات: ${vars}. استخدم *نص* للخط العريض بالواتساب.</span></div>
+
+        <h2 style="margin:18px 0 8px">ربط جوجل شيت</h2>
+        <ol class="steps">
+          <li>افتح <a href="https://sheets.new" target="_blank" rel="noopener">شيت جديد</a> وسمّيه مثلاً «طلبات عصفور».</li>
+          <li>من القائمة: Extensions ← Apps Script. امسح الموجود والصق الكود تحت، وبعدين Save.</li>
+          <li>Deploy ← New deployment ← النوع Web app. خلي Execute as: Me و Who has access: Anyone، واكبس Deploy ووافق على الصلاحيات.</li>
+          <li>انسخ رابط الـ Web app (بينتهي بـ /exec) والصقه تحت، واكبس حفظ.</li>
+        </ol>
+        <div class="field"><label>كود Apps Script</label>
+          <textarea class="input code" rows="8" readonly data-code>${esc(appsScript(secret))}</textarea>
+          <button type="button" class="btn btn--sm" data-copy style="margin-top:6px;align-self:flex-start">نسخ الكود</button></div>
+        <div class="field"><label>رابط الـ Web app</label><input class="input" name="sheet_url" dir="ltr" value="${esc(st.sheet_url)}" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      </div>
+      <div class="dlg-foot"><button class="btn btn--primary" type="submit" data-save>حفظ</button><button class="btn" type="button" data-close>إلغاء</button>
+        <button class="btn" type="button" data-reset style="margin-inline-start:auto">رجّع نص الرسائل للأصلي</button></div>
+    </form>`;
+    dlg.showModal();
+    const form = $('[data-osettings-form]', dlg);
+    dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+    $('[data-copy]', dlg).addEventListener('click', async () => {
+      const code = $('[data-code]', dlg);
+      try { await navigator.clipboard.writeText(code.value); } catch { code.select(); document.execCommand('copy'); }
+      toast('تم نسخ الكود');
+    });
+    $('[data-reset]', dlg).addEventListener('click', () => {
+      form.new_order.value = ORDER_DEFAULTS.new_order; form.confirmed.value = ORDER_DEFAULTS.confirmed;
+    });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const url = form.sheet_url.value.trim();
+      if (url && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return toast('الرابط لازم يكون رابط Web app من Apps Script وينتهي بـ /exec', true);
+      const btn = $('[data-save]', dlg); btn.disabled = true; btn.textContent = 'جاري الحفظ…';
+      const v = { new_order: form.new_order.value, confirmed: form.confirmed.value, sheet_url: url, secret };
+      try { await api.saveOrderSettings(v); S.orderSettings = v; toast('تم حفظ الإعدادات'); dlg.close(); render(); }
+      catch (err) { console.error(err); toast('حصل خطأ: ' + err.message, true); btn.disabled = false; btn.textContent = 'حفظ'; }
     });
   }
 
@@ -1045,6 +1308,10 @@
   app.addEventListener('click', async e => {
     const el = e.target.closest('button'); if (!el) return;
     const row = el.closest('[data-id]'), p = row && find(row.dataset.id);
+    if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
+    if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
+    if (el.matches('[data-osettings]')) return openOrderSettings();
+    if (el.dataset.oact) return orderAction(S.orders.find(o => o.id === el.closest('[data-order-id]').dataset.orderId), el.dataset.oact);
     if (el.dataset.filter) { S.filter = el.dataset.filter; return render(); }
     if (el.matches('[data-add]')) return openEdit(null);
     if (el.matches('[data-renumber]')) return renumber();
