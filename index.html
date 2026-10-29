@@ -222,8 +222,8 @@
       </div>
     </div>
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" data-tab="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>الطلبات</button>
-      <button class="tab" role="tab" data-tab="list" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="3.5" rx="1"/><path d="M10.5 5.5v3M13.5 5.5v3"/><rect x="5" y="8.5" width="14" height="13.5" rx="3.5"/></svg>العطور</button>
+      <button class="tab" role="tab" data-tab="orders" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>الطلبات</button>
+      <button class="tab" role="tab" data-tab="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="3.5" rx="1"/><path d="M10.5 5.5v3M13.5 5.5v3"/><rect x="5" y="8.5" width="14" height="13.5" rx="3.5"/></svg>العطور</button>
       <button class="tab" role="tab" data-tab="preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>معاينة ترتيب الزبون</button>
       <button class="tab" role="tab" data-tab="cats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1"/></svg>التصنيفات</button>
       <button class="tab" role="tab" data-tab="offers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/></svg>العروض</button>
@@ -254,7 +254,7 @@
   const DEMO = !(params.has('host') || params.has('shop'));
 
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
-              priorityType: 'number_integer', tab: 'list', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(),
+              priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
               orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null };
 
   const $ = (s, r = document) => r.querySelector(s);
@@ -593,6 +593,9 @@
 
   function render() {
     document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === S.tab));
+    // The orders tab loads on its own; the perfume tabs wait for the catalogue (or its saved copy).
+    if (S.tab !== 'orders' && !S.productsReady) { app.innerHTML = '<div class="loading">جاري تحميل العطور…</div>'; return; }
+    if (S.productsReady) saveCache();
     ({ orders: renderOrders, list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
   }
 
@@ -870,6 +873,8 @@
     postponed: ['مؤجل', 'badge--hidden'], delivered: ['تم التسليم', 'badge--ok'], cancelled: ['ملغي', 'badge--out'] };
   // Status after confirmation, kept as one order tag each; the value is what the sheet's «حالة الاوردر» column gets.
   const STATUS_TAGS = { postponed: ['مؤجل', 'مؤجل'], delivered: ['تم-التسليم', 'تم التوصيل'], cancelled: ['ملغي', 'ملغي'] };
+  // What the sheet shows for a confirmed order that has no later status yet.
+  const SHEET_CONFIRMED = 'قيد التوصيل';
   const ORDER_FIELDS = `id name createdAt cancelledAt tags note
     totalPriceSet { shopMoney { amount } } phone
     customer { firstName lastName phone }
@@ -985,7 +990,7 @@
       customer: o.customer, offer, details: lines.join('\n') + '\n.', note: o.note,
       location: [o.city, o.address].filter(Boolean).join(' / '), phone: wa.startsWith('962') ? '0' + wa.slice(3) : o.phone,
       date: new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }), area: /عم+ان|عمّان/.test(o.city) ? 'داخل' : 'خارج',
-      premium: premium.slice(0, 4), total: o.total
+      premium: premium.slice(0, 4), total: o.total, status: SHEET_CONFIRMED
     };
   }
 
@@ -1042,7 +1047,7 @@
     app.innerHTML = `
       ${S.orderSettings.sheet_url ? '' : '<div class="note note--warn">لسا ما ربطت جوجل شيت. اكبس «الإعدادات» وتابع الخطوات عشان الطلبات المؤكدة تنرفع عليه.</div>'}
       <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
-        ${['new', 'sent', 'confirmed', 'postponed', 'delivered', 'cancelled', 'all'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
+        ${['all', 'new', 'sent', 'confirmed', 'postponed', 'delivered', 'cancelled'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
           <b>${k === 'all' ? S.orders.length : counts[k] || 0}</b>${k === 'all' ? 'كل الطلبات' : ORDER_STATES[k][0]}</button>`).join('')}
       </div>
       <div class="card">
@@ -1101,7 +1106,7 @@
       o.tags = [...o.tags.filter(t => !remove.includes(t)), ...add];
       // Confirmed orders have a row in the sheet; keep its «حالة الاوردر» in step.
       if (o.tags.includes(TAG_CONFIRMED) && S.orderSettings.sheet_url && !DEMO) {
-        const body = JSON.stringify({ secret: S.orderSettings.secret, action: 'status', order: o.name, status: STATUS_TAGS[next]?.[1] || '' });
+        const body = JSON.stringify({ secret: S.orderSettings.secret, action: 'status', order: o.name, status: STATUS_TAGS[next]?.[1] || SHEET_CONFIRMED });
         const ok = await fetch(S.orderSettings.sheet_url, { method: 'POST', body }).then(r => r.json()).then(j => j.ok).catch(() => false);
         if (!ok) toast('الحالة تغيّرت هون، بس ما تحدّثت بالشيت. عدّلها بالشيت يدوي', true);
       }
@@ -1148,6 +1153,7 @@ function doPost(e) {
     set(10, String(d.phone));
     const [y, m, day] = d.date.split('-').map(Number);
     set(14, new Date(y, m - 1, day));
+    set(15, d.status || 'قيد التوصيل');
     set(16, 'موقع');
     set(17, d.area);
     const keys = ss.getSheetByName('الإعدادات').getRange('H2:H').getValues().flat().filter(String);
@@ -1570,12 +1576,44 @@ function reply(o) {
   });
 
   /* ---------------- Start ---------------- */
+  // The catalogue from the last visit is shown at once and refreshed in the background, so opening
+  // the app doesn't wait for 160+ perfumes to download.
+  const CACHE_KEY = 'asfour-manager-cache-v1';
+  const CACHED = ['products', 'collections', 'offers', 'locationId', 'onlinePub', 'optionName', 'priorityType'];
+  let saveTimer;
+  function saveCache() {
+    if (DEMO) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(CACHED.map(k => [k, S[k]])))); } catch {}
+    }, 500);
+  }
+  function loadCache() {
+    if (DEMO) return false;
+    try {
+      const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (!c?.products?.length) return false;
+      CACHED.forEach(k => (S[k] = c[k]));
+      return true;
+    } catch { return false; }
+  }
+  // Don't redraw under the owner's fingers (open dialog or a field being typed in).
+  const busy = () => dlg.open || askDlg.open || (app.contains(document.activeElement) && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName));
+
   (async () => {
     if (DEMO) $('#demo-bar').hidden = false;
-    try { await api.load(); render(); }
+    S.productsReady = loadCache();
+    render();
+    try {
+      await api.load();
+      S.productsReady = true;
+      if (S.tab !== 'orders' && !busy()) render(); else saveCache();
+    }
     catch (e) {
       console.error(e);
-      app.innerHTML = `<div class="card empty">تعذّر تحميل البيانات: ${esc(e.message)}<br><br><button class="btn" onclick="location.reload()">إعادة المحاولة</button></div>`;
+      // With a saved copy on screen (or the orders tab open) a toast is enough; otherwise there's nothing to show.
+      if (S.productsReady || S.tab === 'orders') toast('تعذّر تحديث العطور: ' + e.message, true);
+      else app.innerHTML = `<div class="card empty">تعذّر تحميل البيانات: ${esc(e.message)}<br><br><button class="btn" onclick="location.reload()">إعادة المحاولة</button></div>`;
     }
   })();
 })();
