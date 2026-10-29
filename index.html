@@ -114,6 +114,8 @@
 
     .order { padding: 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
     .order:last-child { border-bottom: 0; }
+    .order.is-cancelled { background: var(--danger-soft); border-inline-start: 4px solid var(--danger); }
+    .order.is-cancelled .order__items { background: #fff6f5; }
     .order__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .order__items { white-space: pre-line; font-size: 13px; background: #fafbf9; border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
     .order__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
@@ -788,7 +790,10 @@
     confirmed: 'تم تأكيد طلبك بنجاح من عطور عصفور 👑✨\n\nطلبك الآن قيد التجهيز بعناية، و[موعد التوصيل]\nإذا كان لديك أي استفسار أو تعديل نحن دائماً بخدمتك.\nشكراً لاختيارك وثقتك بعطور عصفور 🕊️',
     sheet_url: '', secret: ''
   };
-  const ORDER_STATES = { new: ['جديد', 'badge--draft'], sent: ['بانتظار رد الزبون', 'badge--hidden'], confirmed: ['مؤكد', 'badge--ok'], cancelled: ['ملغي', 'badge--out'] };
+  const ORDER_STATES = { new: ['جديد', 'badge--draft'], sent: ['بانتظار رد الزبون', 'badge--hidden'], confirmed: ['مؤكد', 'badge--ok'],
+    postponed: ['مؤجل', 'badge--hidden'], delivered: ['تم التسليم', 'badge--ok'], cancelled: ['ملغي', 'badge--out'] };
+  // Status after confirmation, kept as one order tag each; the value is what the sheet's «حالة الاوردر» column gets.
+  const STATUS_TAGS = { postponed: ['مؤجل', 'مؤجل'], delivered: ['تم-التسليم', 'تم التوصيل'], cancelled: ['ملغي', 'ملغي'] };
   const ORDER_FIELDS = `id name createdAt cancelledAt tags note
     totalPriceSet { shopMoney { amount } } phone
     customer { firstName lastName phone }
@@ -804,10 +809,13 @@
       phone: a.phone || n.phone || c.phone || '', city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' / '),
       // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
       items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount),
-        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key)).map(x => x.value) }))
+        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key))
+          .map(x => { const m = x.key.match(/\((110|50) مل\)/); return m ? `${x.value} ${m[1]}مل` : x.value; }) }))
     };
   }
-  const orderState = o => (o.cancelled ? 'cancelled' : o.tags.includes(TAG_CONFIRMED) ? 'confirmed' : o.tags.includes(TAG_SENT) ? 'sent' : 'new');
+  const orderState = o => (o.cancelled ? 'cancelled'
+    : Object.keys(STATUS_TAGS).find(k => o.tags.includes(STATUS_TAGS[k][0]))
+      || (o.tags.includes(TAG_CONFIRMED) ? 'confirmed' : o.tags.includes(TAG_SENT) ? 'sent' : 'new'));
   const jod = n => `${n.toFixed(2)} د.أ.`;
 
   const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -824,7 +832,12 @@
   function itemsText(o, wa = true) {
     const b = wa ? '*' : '';
     // The top-grade difference line is internal; the total already includes it.
-    return o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض')).map(li => [`• ${li.title}${li.qty > 1 ? ` × ${li.qty}` : ''} — ${b}${jod(li.price * li.qty)}${b}`, ...li.props.map(v => `   ◦ ${v}`)].join('\n')).join('\n');
+    return o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض')).map(li => {
+      // A single perfume (no offer slots) carries its size and grade in the variant: "110ML / نخب أول".
+      const size = !li.props.length && li.variant.match(/(110|50)/);
+      const name = size ? `${li.title}${li.variant.includes('نخب أول') ? ' (نخب أول)' : ''} ${size[1]}مل` : li.title;
+      return [`• ${name}${li.qty > 1 ? ` × ${li.qty}` : ''} — ${b}${jod(li.price * li.qty)}${b}`, ...li.props.map(v => `   ◦ ${v}`)].join('\n');
+    }).join('\n');
   }
   function fillMessage(tpl, o) {
     const vars = { 'وقت التحية': ammanNow().hour < 12 ? 'صباح الخير' : 'مساء الخير', 'اسم العميل': o.customer, 'تفاصيل العطور': itemsText(o),
@@ -932,8 +945,8 @@
     const list = S.orders.filter(o => S.orderFilter === 'all' || orderState(o) === S.orderFilter);
     app.innerHTML = `
       ${S.orderSettings.sheet_url ? '' : '<div class="note note--warn">لسا ما ربطت جوجل شيت. اكبس «الإعدادات» وتابع الخطوات عشان الطلبات المؤكدة تنرفع عليه.</div>'}
-      <div class="stats" style="grid-template-columns:repeat(4,1fr)">
-        ${['new', 'sent', 'confirmed', 'all'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
+      <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+        ${['new', 'sent', 'confirmed', 'postponed', 'delivered', 'cancelled', 'all'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
           <b>${k === 'all' ? S.orders.length : counts[k] || 0}</b>${k === 'all' ? 'كل الطلبات' : ORDER_STATES[k][0]}</button>`).join('')}
       </div>
       <div class="card">
@@ -946,9 +959,15 @@
   function orderRow(o) {
     const st = orderState(o), [label, cls] = ORDER_STATES[st];
     const date = new Date(o.createdAt).toLocaleString('ar-JO', { timeZone: 'Asia/Amman', day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit' });
-    const buttons = st === 'cancelled' ? '' : `<button class="btn btn--sm" data-oact="send">📩 ${st === 'new' ? 'رسالة التأكيد' : 'إعادة الرسالة'}</button>
-      ${st === 'confirmed' ? '<button class="btn btn--sm" data-oact="unconfirm">تراجع عن التأكيد</button>' : '<button class="btn btn--sm btn--primary" data-oact="confirm">✅ تم التأكيد</button>'}`;
-    return `<div class="order" data-order-id="${o.id}">
+    const confirmed = o.tags.includes(TAG_CONFIRMED);
+    const buttons = (st === 'new' || st === 'sent' ? `<button class="btn btn--sm" data-oact="send">📩 ${st === 'new' ? 'رسالة التأكيد' : 'إعادة الرسالة'}</button>
+      <button class="btn btn--sm btn--primary" data-oact="confirm">✅ تم التأكيد</button>` : '')
+      + (st === 'confirmed' ? '<button class="btn btn--sm" data-oact="unconfirm">تراجع عن التأكيد</button>' : '')
+      // A Shopify-cancelled order stays cancelled; everything else can move between the statuses.
+      + (o.cancelled ? '' : `<select class="input" data-ostatus style="width:auto;padding:4px 8px">
+        ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [st, 'cancelled']).filter((k, i, a) => a.indexOf(k) === i)
+          .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`);
+    return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}" data-order-id="${o.id}">
       <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span><span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
       ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
@@ -976,6 +995,22 @@
     }
   }
 
+  async function orderStatus(o, next) {
+    const remove = Object.values(STATUS_TAGS).map(t => t[0]).filter(t => o.tags.includes(t) && t !== STATUS_TAGS[next]?.[0]);
+    const add = STATUS_TAGS[next] && !o.tags.includes(STATUS_TAGS[next][0]) ? [STATUS_TAGS[next][0]] : [];
+    await run(`صارت الحالة: ${ORDER_STATES[next][0]}`, async () => {
+      if (add.length) await api.addTags(o, add);
+      if (remove.length) await api.removeTags(o, remove);
+      o.tags = [...o.tags.filter(t => !remove.includes(t)), ...add];
+      // Confirmed orders have a row in the sheet; keep its «حالة الاوردر» in step.
+      if (o.tags.includes(TAG_CONFIRMED) && S.orderSettings.sheet_url && !DEMO) {
+        const body = JSON.stringify({ secret: S.orderSettings.secret, action: 'status', order: o.name, status: STATUS_TAGS[next]?.[1] || '' });
+        const ok = await fetch(S.orderSettings.sheet_url, { method: 'POST', body }).then(r => r.json()).then(j => j.ok).catch(() => false);
+        if (!ok) toast('الحالة تغيّرت هون، بس ما تحدّثت بالشيت. عدّلها بالشيت يدوي', true);
+      }
+    });
+  }
+
   const appsScript = secret => `// عطور عصفور: الطلبات المؤكدة من تطبيق مدير العروض بتنكتب بتبويب «الطلبات»
 // بأول سطر فاضي بعد آخر طلب. بيعبّي بس الأعمدة اللي بتنكتب باليد، والمعادلات بتضل زي ما هي.
 const SECRET = '${secret}';
@@ -989,9 +1024,16 @@ function doPost(e) {
   lock.waitLock(20000);
   try {
     const props = PropertiesService.getScriptProperties();
-    if (props.getProperty('order ' + d.order)) return reply({ ok: true, duplicate: true });
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sh = ss.getSheetByName(SHEET);
+    // تغيير الحالة من التطبيق: بيكتب بعمود «حالة الاوردر» بسطر الطلب.
+    if (d.action === 'status') {
+      const row = Number(props.getProperty('order ' + d.order));
+      if (!row) return reply({ ok: true, skipped: true });
+      sh.getRange(row, 15).setValue(d.status);
+      return reply({ ok: true, row: row });
+    }
+    if (props.getProperty('order ' + d.order)) return reply({ ok: true, duplicate: true });
     const names = sh.getRange(FIRST_ROW, 5, sh.getMaxRows() - FIRST_ROW + 1, 1).getValues();
     let used = names.length;
     while (used > 0 && String(names[used - 1][0]).trim() === '') used--;
@@ -1385,6 +1427,7 @@ function reply(o) {
 
   app.addEventListener('change', e => {
     const el = e.target, row = el.closest('[data-id]'), p = row && find(row.dataset.id);
+    if (el.matches('[data-ostatus]')) return orderStatus(S.orders.find(o => o.id === el.closest('[data-order-id]').dataset.orderId), el.value);
     if (el.matches('[data-cat]')) { S.cat = el.value; return render(); }
     if (el.matches('[data-sort]')) { S.sort = el.value; return render(); }
     if (el.matches('[data-selall]')) { filtered().forEach(x => (el.checked ? S.selected.add(x.id) : S.selected.delete(x.id))); return render(); }
