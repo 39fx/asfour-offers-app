@@ -935,10 +935,25 @@
     if (!j.ok) throw new Error(j.error || 'الشيت رفض الطلب، تأكد من الرابط والرمز');
   }
 
+  // The orders worker (asfour-orders-worker) sends the confirmation message by itself when an order
+  // comes in; mark those orders as sent here. Its URL and key live in the order_messages settings.
+  async function syncAutoSent() {
+    const st = S.orderSettings;
+    if (DEMO || !st.worker_url || !st.worker_key) return;
+    const r = await fetch(`${st.worker_url}/sent`, { headers: { 'X-Asfour-Key': st.worker_key } }).then(x => x.json()).catch(() => null);
+    if (!r?.ok) return;
+    for (const o of S.orders) {
+      const id = o.id.split('/').pop();
+      if (r.orders[id] === 'sent' && orderState(o) === 'new') {
+        try { await api.addTags(o, [TAG_SENT]); o.tags.push(TAG_SENT); } catch (e) { console.error(e); }
+      }
+    }
+  }
+
   async function loadOrders() {
     if (S.ordersLoading) return;
     S.ordersLoading = true;
-    try { await api.loadOrders(); }
+    try { await api.loadOrders(); await syncAutoSent(); }
     catch (e) {
       console.error(e);
       S.orders = null;
@@ -1106,6 +1121,7 @@ function reply(o) {
     dlg.innerHTML = `<form method="dialog" data-osettings-form>
       <div class="dlg-head"><h2 style="margin:0">إعدادات الطلبات والواتساب</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
       <div class="dlg-body">
+        ${st.worker_url ? '<div class="note">رسالة التأكيد بتنبعت <b>أوتوماتيك</b> من رقمك أول ما يوصل الأوردر. زر «رسالة التأكيد» بالطلبات بضل موجود للإرسال اليدوي.</div>' : ''}
         <div class="field"><label>رسالة التأكيد (أول ما يطلب الزبون)</label><textarea class="input" name="new_order" rows="9">${esc(st.new_order)}</textarea></div>
         <div class="field"><label>رسالة «تم تأكيد طلبك»</label><textarea class="input" name="confirmed" rows="6">${esc(st.confirmed)}</textarea>
           <span class="muted small">المتغيرات: ${vars}. استخدم *نص* للخط العريض بالواتساب.</span></div>
@@ -1141,8 +1157,17 @@ function reply(o) {
       const url = form.sheet_url.value.trim();
       if (url && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return toast('الرابط لازم يكون رابط Web app من Apps Script وينتهي بـ /exec', true);
       const btn = $('[data-save]', dlg); btn.disabled = true; btn.textContent = 'جاري الحفظ…';
-      const v = { new_order: form.new_order.value, confirmed: form.confirmed.value, sheet_url: url, secret };
-      try { await api.saveOrderSettings(v); S.orderSettings = v; toast('تم حفظ الإعدادات'); dlg.close(); render(); }
+      const v = { ...st, new_order: form.new_order.value, confirmed: form.confirmed.value, sheet_url: url, secret };
+      try {
+        await api.saveOrderSettings(v); S.orderSettings = v;
+        // The automatic message uses the same text; hand it to the orders worker too.
+        if (v.worker_url && v.worker_key && !DEMO) {
+          const ok = await fetch(`${v.worker_url}/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Asfour-Key': v.worker_key },
+            body: JSON.stringify({ new_order: v.new_order }) }).then(r => r.ok).catch(() => false);
+          if (!ok) toast('انحفظت الإعدادات، بس نص الرسالة الأوتوماتيكية ما تحدّث. جرّب كمان مرة', true);
+        }
+        toast('تم حفظ الإعدادات'); dlg.close(); render();
+      }
       catch (err) { console.error(err); toast('حصل خطأ: ' + err.message, true); btn.disabled = false; btn.textContent = 'حفظ'; }
     });
   }
