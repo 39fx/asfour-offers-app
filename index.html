@@ -823,7 +823,8 @@
   }
   function itemsText(o, wa = true) {
     const b = wa ? '*' : '';
-    return o.items.map(li => [`• ${li.title}${li.qty > 1 ? ` × ${li.qty}` : ''} — ${b}${jod(li.price * li.qty)}${b}`, ...li.props.map(v => `   ◦ ${v}`)].join('\n')).join('\n');
+    // The top-grade difference line is internal; the total already includes it.
+    return o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض')).map(li => [`• ${li.title}${li.qty > 1 ? ` × ${li.qty}` : ''} — ${b}${jod(li.price * li.qty)}${b}`, ...li.props.map(v => `   ◦ ${v}`)].join('\n')).join('\n');
   }
   function fillMessage(tpl, o) {
     const vars = { 'وقت التحية': ammanNow().hour < 12 ? 'صباح الخير' : 'مساء الخير', 'اسم العميل': o.customer, 'تفاصيل العطور': itemsText(o),
@@ -843,7 +844,8 @@
     const phone = waPhone(o.phone);
     if (!phone) { toast('ما في رقم هاتف على هذا الطلب', true); return false; }
     const a = document.createElement('a');
-    a.href = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`; a.target = '_blank'; a.rel = 'noopener';
+    // api.whatsapp.com directly: the wa.me redirect turns emoji into "�".
+    a.href = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`; a.target = '_blank'; a.rel = 'noopener';
     document.body.appendChild(a); a.click(); a.remove();
     return true;
   }
@@ -886,10 +888,12 @@
     const body = JSON.stringify({ secret: st.secret, order: o.name, ...sheetRow(o) });
     if (DEMO) return;
     // text/plain keeps it a simple request (no CORS preflight, which Apps Script can't answer).
+    // A script crash comes back as an HTML page without CORS headers, so it shows up here as a network error;
+    // no retry, since the script may already have written part of the row.
     let res;
     try { res = await fetch(st.sheet_url, { method: 'POST', body }); }
-    catch { await fetch(st.sheet_url, { method: 'POST', body, mode: 'no-cors' }); return; }  // the script skips duplicates
-    const j = await res.json().catch(() => ({ ok: res.ok }));
+    catch { throw new Error('الشيت ما رد صح. شيك على تبويب الطلبات قبل ما تعيد التأكيد'); }
+    const j = await res.json().catch(() => ({ ok: false, error: 'رد غير مفهوم من الشيت' }));
     if (!j.ok) throw new Error(j.error || 'الشيت رفض الطلب، تأكد من الرابط والرمز');
   }
 
@@ -990,7 +994,7 @@ function doPost(e) {
     set(7, d.details);
     set(8, d.note || '');
     set(9, d.location);
-    sh.getRange(r, 10).setNumberFormat('@').setValue(d.phone);
+    set(10, String(d.phone));
     const [y, m, day] = d.date.split('-').map(Number);
     set(14, new Date(y, m - 1, day));
     set(16, 'موقع');
