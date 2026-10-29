@@ -486,6 +486,11 @@
       S.orderSettings = { ...ORDER_DEFAULTS, ...(d.shop.settings ? JSON.parse(d.shop.settings.value) : {}) };
       S.orders = d.orders.nodes.map(mapOrder);
     },
+    async deleteOrder(o) {
+      // Shopify only deletes cancelled or archived orders, so an open one is archived first.
+      if (!o.cancelled) check((await gql(`mutation($id: ID!) { orderClose(input: { id: $id }) { userErrors { message } } }`, { id: o.id })).orderClose);
+      check((await gql(`mutation($id: ID!) { orderDelete(orderId: $id) { userErrors { message } } }`, { id: o.id })).orderDelete);
+    },
     async saveOrderSettings(v) {
       check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
         { m: [{ ownerId: S.shopId, namespace: 'custom', key: 'order_messages', type: 'json', value: JSON.stringify(v) }] })).metafieldsSet);
@@ -516,7 +521,7 @@
           { id: 'o3', title: 'العرض الملكي | 5 عطور حجم 110مل + عطر مجاناً', handle: 'offer-royal', type: 'عرض', status: 'ACTIVE', variants: [{ price: '50.000', compareAt: '90.000' }] }];
         S.locationId = 'l';
       },
-      setPriority: wait, setPriorities: wait, addTags: wait, removeTags: wait, setStock: wait, setStatus: wait, destroy: wait,
+      setPriority: wait, setPriorities: wait, addTags: wait, removeTags: wait, deleteOrder: wait, setStock: wait, setStatus: wait, destroy: wait,
       addToCollection: wait, removeFromCollection: wait, updateBasics: wait, updatePrices: wait, setImage: wait,
       async loadOfferDetails(o) { await wait(); o.media = o.media || [{ id: 'm1', url: '' }, { id: 'm2', url: '' }]; },
       async saveOffer(o, f) { await wait(); Object.assign(o, { title: f.title, status: f.status, config: f.config }); Object.assign(o.variants[0], { price: f.price, compareAt: f.compareAt });
@@ -1072,7 +1077,8 @@
       // cancelled one can go back (the customer may change their mind).
       + (o.cancelled ? '' : `<select class="input" data-ostatus style="width:auto;padding:4px 8px">
         ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
-          .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`);
+          .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`)
+      + '<button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
     return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}" data-order-id="${o.id}">
       <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span><span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
@@ -1098,6 +1104,11 @@
     if (act === 'unconfirm') {
       if (!await confirmBox(`إرجاع ${o.name} لغير مؤكد؟ السطر اللي على الشيت بضل، احذفه يدوي إذا بدك.`)) return;
       return run('رجع الطلب لغير مؤكد', async () => { await api.removeTags(o, [TAG_CONFIRMED]); o.tags = o.tags.filter(t => t !== TAG_CONFIRMED); });
+    }
+    if (act === 'delete') {
+      const sheet = o.tags.includes(TAG_CONFIRMED) ? ' سطره على الشيت بضل، احذفه يدوي إذا بدك.' : '';
+      if (!await confirmBox(`حذف الطلب ${o.name} (${o.customer}) نهائياً من شوبيفاي؟ لا يمكن التراجع عن هذا.${sheet}`)) return;
+      return run(`انحذف الطلب ${o.name}`, async () => { await api.deleteOrder(o); S.orders = S.orders.filter(x => x !== o); });
     }
   }
 
