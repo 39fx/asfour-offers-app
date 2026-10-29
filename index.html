@@ -166,6 +166,7 @@
   const SOURCE_HANDLE = 'perfumes';            // the collection the offer picker lists
   const SKIP_TYPES = ['عرض', 'بكج', 'خدمة'];   // offers, bundles and service products are not perfumes
   const SERVICE_TAG = 'منتج-خدمة';
+  const BANNER_ALT = 'offer-banner';           // alt text the theme looks for to show the image under the timer
   const SKIP_COLLECTIONS = ['frontpage', 'offers'];
   const FAMILIES = ['فانيليا', 'خشبي', 'توابل', 'زهري', 'حمضيات', 'عود'];
   const GENDERS = ['رجالي', 'نسائي', 'للجنسين'];
@@ -323,9 +324,12 @@
     },
     async loadOfferDetails(o) {
       const d = await gql(`query($id: ID!) { product(id: $id) {
-          media(first: 30) { nodes { id ... on MediaImage { image { url(transform: { maxWidth: 300 }) } } } }
+          media(first: 30) { nodes { id alt ... on MediaImage { image { url(transform: { maxWidth: 300 }) } } } }
           config: metafield(namespace: "custom", key: "offer_config") { value } } }`, { id: o.id });
-      o.media = d.product.media.nodes.filter(m => m.image).map(m => ({ id: m.id, url: m.image.url }));
+      const all = d.product.media.nodes.filter(m => m.image).map(m => ({ id: m.id, url: m.image.url, alt: m.alt }));
+      // The image under the countdown is stored on the offer itself, marked with alt "offer-banner".
+      o.banner = all.find(m => m.alt === BANNER_ALT) || null;
+      o.media = all.filter(m => m.alt !== BANNER_ALT);
       o.config = d.product.config ? JSON.parse(d.product.config.value) : null;
     },
     async saveOffer(o, f) {
@@ -340,6 +344,10 @@
       check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
         { m: [{ ownerId: o.id, namespace: 'custom', key: 'offer_config', type: 'json', value: JSON.stringify(f.config) }] })).metafieldsSet);
       for (const file of f.files) await this.setImage(o, await this.uploadImage(file));
+      if (f.bannerFile) {
+        await this.setImage(o, await this.uploadImage(f.bannerFile), BANNER_ALT);
+        if (o.banner) await this.deleteOfferMedia(o, o.banner.id);
+      }
       Object.assign(o, { title: f.title, status: f.status, config: f.config });
     },
     async deleteOfferMedia(o, mediaId) {
@@ -355,9 +363,9 @@
       if (errs.length) throw new Error(errs.map(e => e.message).join(' | '));
       o.media = [o.media.find(m => m.id === mediaId), ...o.media.filter(m => m.id !== mediaId)];
     },
-    async setImage(p, source) {
+    async setImage(p, source, alt) {
       const d = await gql(`mutation($p: ProductUpdateInput!, $m: [CreateMediaInput!]) { productUpdate(product: $p, media: $m) { userErrors { message } } }`,
-        { p: { id: p.id }, m: [{ originalSource: source, mediaContentType: 'IMAGE' }] });
+        { p: { id: p.id }, m: [{ originalSource: source, mediaContentType: 'IMAGE', ...(alt ? { alt } : {}) }] });
       check(d.productUpdate);
     },
     async create(f) {
@@ -413,7 +421,8 @@
       setPriority: wait, setPriorities: wait, addTags: wait, removeTags: wait, setStock: wait, setStatus: wait, destroy: wait,
       addToCollection: wait, removeFromCollection: wait, updateBasics: wait, updatePrices: wait, setImage: wait,
       async loadOfferDetails(o) { await wait(); o.media = o.media || [{ id: 'm1', url: '' }, { id: 'm2', url: '' }]; },
-      async saveOffer(o, f) { await wait(); Object.assign(o, { title: f.title, status: f.status, config: f.config }); Object.assign(o.variants[0], { price: f.price, compareAt: f.compareAt }); },
+      async saveOffer(o, f) { await wait(); Object.assign(o, { title: f.title, status: f.status, config: f.config }); Object.assign(o.variants[0], { price: f.price, compareAt: f.compareAt });
+        if (f.bannerFile) o.banner = { id: 'b1', url: URL.createObjectURL(f.bannerFile) }; },
       async deleteOfferMedia(o, id) { await wait(); },
       async makeOfferMediaMain(o, id) { await wait(); o.media = [o.media.find(m => m.id === id), ...o.media.filter(m => m.id !== id)]; },
       async uploadImage(file) { await wait(); return URL.createObjectURL(file); },
@@ -602,6 +611,23 @@
     show_countdown: true, show_banner: true, upsell_handle: '', upsell_badge: '', upsell_text: '' };
   const offerConfig = o => ({ ...BASE_CONFIG, ...(OFFER_DEFAULTS[o.handle] || {}), ...(o.config || {}) });
 
+  // Shrink an image before upload: at most `maxW` wide, re-encoded as WebP (far smaller than PNG).
+  async function toWebp(file, maxW = 1200, quality = 0.82) {
+    if (!file || !file.type.startsWith('image/') || file.type === 'image/gif') return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, maxW / bmp.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/webp', quality));
+      if (!blob || blob.size >= file.size) return file;  // keep the original if WebP isn't smaller
+      return new File([blob], file.name.replace(/\.\w+$/, '') + '.webp', { type: 'image/webp' });
+    } catch { return file; }
+  }
+  const kb = n => `${Math.max(1, Math.round(n / 1024))}KB`;
+
   function renderOffers() {
     const n = active().filter(visibleInOffers).length;
     const list = S.offers.filter(o => o.status !== 'ARCHIVED' && o.type === 'عرض');
@@ -645,6 +671,11 @@
             <button type="button" class="btn btn--sm btn--danger" data-media-del="${m.id}">حذف</button></div></figure>`).join('') || '<span class="muted small">لا توجد صور</span>'}</div>
           <input class="input" type="file" name="images" accept="image/*" multiple style="margin-top:8px">
           <span class="muted small">اختر صورة أو أكثر لإضافتها عند الحفظ.</span></div>
+
+        <div class="field"><label>الصورة تحت المؤقت (بانر الهدية/الشحن)</label>
+          ${o.banner ? `<img src="${esc(o.banner.url)}" alt="" style="max-width:220px;border-radius:10px;border:1px solid var(--line)">` : '<span class="muted small">حالياً بتظهر الصورة الافتراضية (تستر + عطر 50 مل مجاناً).</span>'}
+          <input class="input" type="file" name="banner" accept="image/*" style="margin-top:8px">
+          <span class="muted small">بتتحوّل تلقائياً لصيغة WebP وبتصغر قبل الرفع. وبتبين بس إذا «بانر الهدية/الشحن المجاني» مفعّل تحت.</span></div>
 
         <h2 style="margin:18px 0 8px">إعدادات صفحة العرض</h2>
         <div class="grid2">
@@ -694,9 +725,12 @@
         upsell_text: fd.get('upsell_text').trim()
       };
       try {
+        const raw = form.querySelector('[name=banner]').files[0];
+        const bannerFile = raw ? await toWebp(raw) : null;
+        const files = await Promise.all([...form.querySelector('[name=images]').files].map(f => toWebp(f, 1600)));
         await api.saveOffer(o, { title: fd.get('title').trim(), status: fd.get('active') === 'on' ? 'ACTIVE' : 'DRAFT',
-          price: fd.get('price'), compareAt: fd.get('compare'), config, files: [...form.querySelector('[name=images]').files] });
-        toast('تم حفظ العرض');
+          price: fd.get('price'), compareAt: fd.get('compare'), config, files, bannerFile });
+        toast(bannerFile && raw !== bannerFile ? `تم حفظ العرض · الصورة صارت ${kb(bannerFile.size)} بدل ${kb(raw.size)}` : 'تم حفظ العرض');
         dlg.close();
       } catch (err) {
         console.error(err); toast('حصل خطأ: ' + err.message, true);
