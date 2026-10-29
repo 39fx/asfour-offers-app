@@ -793,7 +793,7 @@
     totalPriceSet { shopMoney { amount } } phone
     customer { firstName lastName phone }
     shippingAddress { firstName lastName phone address1 address2 city }
-    lineItems(first: 50) { nodes { title quantity originalUnitPriceSet { shopMoney { amount } } customAttributes { key value } } }`;
+    lineItems(first: 50) { nodes { title variantTitle quantity originalUnitPriceSet { shopMoney { amount } } customAttributes { key value } } }`;
 
   function mapOrder(n) {
     const a = n.shippingAddress || {}, c = n.customer || {};
@@ -801,10 +801,10 @@
       id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '',
       total: Number(n.totalPriceSet.shopMoney.amount),
       customer: [a.firstName || c.firstName, a.lastName || c.lastName].filter(Boolean).join(' ') || 'زبون',
-      phone: a.phone || n.phone || c.phone || '', city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' - '),
+      phone: a.phone || n.phone || c.phone || '', city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' / '),
       // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
-      items: n.lineItems.nodes.map(li => ({ title: li.title, qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount),
-        props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key)).map(x => x.value) }))
+      items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount),
+        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key)).map(x => x.value) }))
     };
   }
   const orderState = o => (o.cancelled ? 'cancelled' : o.tags.includes(TAG_CONFIRMED) ? 'confirmed' : o.tags.includes(TAG_SENT) ? 'sent' : 'new');
@@ -848,10 +848,42 @@
     return true;
   }
 
+  // The row the way the owner's sheet («الطلبات» tab) is filled by hand: English names with sizes, the
+  // offer label its price lookup knows, and each top-grade pick in its own column pair.
+  function sheetRow(o) {
+    const byTitle = new Map(S.products.map(p => [p.title, p]));
+    const lines = [], premium = [];
+    let n110 = 0, n50 = 0, gift = false;
+    for (const li of o.items) {
+      if (li.attrs.some(a => a.key === 'للعرض')) continue;   // the top-grade difference line
+      const picks = li.attrs.filter(a => !a.key.startsWith('_') && /\((110|50) مل\)/.test(a.key));
+      const entries = picks.length
+        ? picks.map(a => ({ name: a.value, size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية') }))
+        : Array.from({ length: li.qty }, () => ({ name: li.title, size: /110/.test(li.variant) ? '110' : '50', gift: false }));
+      for (const e of entries) {
+        const top = e.name.includes('(نخب أول)');
+        const base = e.name.replace(/\s*\((نخب أول|صنف عالي)\)\s*$/, '');
+        lines.push(`${byTitle.get(base)?.english || base}${top ? ' (نخب أول)' : ''} ${e.size}ml`);
+        if (top) premium.push({ name: base, size: e.size + 'مل' });
+        if (e.gift) gift = true; else if (e.size === '110') n110++; else n50++;
+      }
+    }
+    const count = (n, size) => (n === 1 ? `علبة ${size}مل` : n === 2 ? `علبتين ${size}مل` : `${n} علب ${size}مل`);
+    const offer = [n110 && count(n110, 110), n50 && count(n50, 50), gift && 'علبة 50مل'].filter(Boolean).join(' + ');
+    const next = (ammanNow().day + 1) % 7;
+    const wa = waPhone(o.phone);
+    return {
+      day: ['الاحد', 'الاثنين', 'الثلاثاء', 'الاربعاء', 'الخميس', 'الجمعة', 'السبت'][next === 5 ? 6 : next] + '\\',
+      customer: o.customer, offer, details: lines.join('\n') + '\n.', note: o.note,
+      location: [o.city, o.address].filter(Boolean).join(' / '), phone: wa.startsWith('962') ? '0' + wa.slice(3) : o.phone,
+      date: new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }), area: /عم+ان|عمّان/.test(o.city) ? 'داخل' : 'خارج',
+      premium: premium.slice(0, 4), total: o.total
+    };
+  }
+
   async function postToSheet(o) {
     const st = S.orderSettings;
-    const body = JSON.stringify({ secret: st.secret, order: o.name, date: new Date(o.createdAt).toLocaleString('en-GB', { timeZone: 'Asia/Amman' }),
-      customer: o.customer, phone: o.phone, city: o.city, address: o.address, items: itemsText(o, false), total: o.total, note: o.note });
+    const body = JSON.stringify({ secret: st.secret, order: o.name, ...sheetRow(o) });
     if (DEMO) return;
     // text/plain keeps it a simple request (no CORS preflight, which Apps Script can't answer).
     let res;
@@ -928,25 +960,68 @@
     }
   }
 
-  const appsScript = secret => `// عطور عصفور: استقبال الطلبات المؤكدة من تطبيق مدير العروض
+  const appsScript = secret => `// عطور عصفور: الطلبات المؤكدة من تطبيق مدير العروض بتنكتب بتبويب «الطلبات»
+// بأول سطر فاضي بعد آخر طلب. بيعبّي بس الأعمدة اللي بتنكتب باليد، والمعادلات بتضل زي ما هي.
 const SECRET = '${secret}';
-const HEADERS = ['رقم الطلب', 'تاريخ الطلب', 'الاسم', 'الهاتف', 'المدينة', 'العنوان', 'العطور', 'المبلغ', 'ملاحظة', 'وقت التأكيد'];
+const SHEET = 'الطلبات';
+const FIRST_ROW = 4;
 
 function doPost(e) {
   const d = JSON.parse(e.postData.contents);
   if (d.secret !== SECRET) return reply({ ok: false, error: 'رمز غير صحيح' });
   const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  lock.waitLock(20000);
   try {
-    const sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
-    if (sh.getLastRow() === 0) sh.appendRow(HEADERS);
-    const done = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().flat().map(String);
-    if (done.includes(d.order)) return reply({ ok: true, duplicate: true });
-    sh.appendRow([d.order, d.date, d.customer, "'" + d.phone, d.city, d.address, d.items, d.total, d.note, new Date()]);
-    return reply({ ok: true });
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('order ' + d.order)) return reply({ ok: true, duplicate: true });
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName(SHEET);
+    const names = sh.getRange(FIRST_ROW, 5, sh.getMaxRows() - FIRST_ROW + 1, 1).getValues();
+    let used = names.length;
+    while (used > 0 && String(names[used - 1][0]).trim() === '') used--;
+    const r = FIRST_ROW + used;
+    if (r > sh.getMaxRows()) return reply({ ok: false, error: 'الشيت خلص سطور، زيد سطور بتبويب الطلبات' });
+
+    const set = (col, v) => sh.getRange(r, col).setValue(v);
+    set(1, 'اوردر من الموقع');
+    set(3, d.day);
+    set(5, d.customer);
+    set(6, d.offer);
+    set(7, d.details);
+    set(8, d.note || '');
+    set(9, d.location);
+    sh.getRange(r, 10).setNumberFormat('@').setValue(d.phone);
+    const [y, m, day] = d.date.split('-').map(Number);
+    set(14, new Date(y, m - 1, day));
+    set(16, 'موقع');
+    set(17, d.area);
+    const keys = ss.getSheetByName('الإعدادات').getRange('H2:H').getValues().flat().filter(String);
+    d.premium.forEach((p, i) => { set(25 + i * 2, matchKey(keys, p.name)); set(26 + i * 2, p.size); });
+
+    // إذا السعر اللي حسبه الشيت مختلف عن سعر شوبيفاي، بنحط سعر شوبيفاي بـ «تعديل السعر يدويا».
+    SpreadsheetApp.flush();
+    const price = Number(String(sh.getRange(r, 12).getValue()).replace('٫', '.'));
+    if (Math.abs(price - d.total) > 0.01) set(13, d.total);
+
+    props.setProperty('order ' + d.order, String(r));
+    return reply({ ok: true, row: r });
   } finally {
     lock.releaseLock();
   }
+}
+
+// اسم الصنف العالي لازم يطابق عمود «الصنف» بتبويب الإعدادات عشان السعر وحصة عمران ينحسبوا.
+function matchKey(keys, name) {
+  const norm = s => String(s).split('\\n')[0].replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\\s+/g, ' ').trim();
+  const n = norm(name), nt = n.split(' ');
+  let best = null;
+  keys.forEach(k => {
+    const kn = norm(k), kt = kn.split(' ');
+    if (kn === n || kt.every(t => nt.includes(t)) || nt.every(t => kt.includes(t))) {
+      if (!best || kn.length > norm(best).length) best = k;
+    }
+  });
+  return best || name;
 }
 
 function reply(o) {
@@ -966,8 +1041,8 @@ function reply(o) {
 
         <h2 style="margin:18px 0 8px">ربط جوجل شيت</h2>
         <ol class="steps">
-          <li>افتح <a href="https://sheets.new" target="_blank" rel="noopener">شيت جديد</a> وسمّيه مثلاً «طلبات عصفور».</li>
-          <li>من القائمة: Extensions ← Apps Script. امسح الموجود والصق الكود تحت، وبعدين Save.</li>
+          <li>افتح شيت «نسخة من عطور عصفور 2 (الازبط)». الطلبات بتنكتب بتبويب «الطلبات» بأول سطر فاضي بعد آخر طلب.</li>
+          <li>من القائمة: Extensions ← Apps Script (الإضافات ← برمجة التطبيقات). امسح الموجود والصق الكود تحت، وبعدين Save.</li>
           <li>Deploy ← New deployment ← النوع Web app. خلي Execute as: Me و Who has access: Anyone، واكبس Deploy ووافق على الصلاحيات.</li>
           <li>انسخ رابط الـ Web app (بينتهي بـ /exec) والصقه تحت، واكبس حفظ.</li>
         </ol>
