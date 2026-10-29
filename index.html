@@ -350,8 +350,15 @@
         { p: { id: o.id, title: f.title, status: f.status } })).productUpdate);
       const v = o.variants[0];
       if (v) {
+        // Upgrade variants ("+5 د.أ") cost the offer price plus their extra and share its "before" price.
+        const all = (await gql(`query($id: ID!) { product(id: $id) { variants(first: 100) { nodes { id selectedOptions { value } } } } }`, { id: o.id }))
+          .product.variants.nodes;
+        const rows = all.map(n => {
+          const extra = Number((n.selectedOptions[0]?.value.match(/\+(\d+(?:\.\d+)?)/) || [])[1] || 0);
+          return { id: n.id, price: String(Number(f.price) + extra), compareAtPrice: f.compareAt ? String(f.compareAt) : null };
+        });
         check((await gql(`mutation($pid: ID!, $v: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $pid, variants: $v) { userErrors { message } } }`,
-          { pid: o.id, v: [{ id: v.id, price: String(f.price), compareAtPrice: f.compareAt ? String(f.compareAt) : null }] })).productVariantsBulkUpdate);
+          { pid: o.id, v: rows })).productVariantsBulkUpdate);
         Object.assign(v, { price: String(f.price), compareAt: f.compareAt || null });
       }
       check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
@@ -783,6 +790,8 @@
   // Messages go out from the shop's own number: the app opens WhatsApp with the text ready and the
   // owner presses send. Progress is kept as order tags; confirmed orders are posted to a Google Sheet
   // through an Apps Script web app (settings live in the shop's custom.order_messages metafield).
+  // A top-grade pick carries its extra at the end of its name: "… (نخب أول) +5 د.أ".
+  const EXTRA_RE = /\s*\+(\d+(?:\.\d+)?)\s*د\.أ\s*$/;
   const TAG_SENT = 'رسالة-التأكيد-انبعتت';
   const TAG_CONFIRMED = 'مؤكد';
   const ORDER_DEFAULTS = {
@@ -810,7 +819,11 @@
       // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
       items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount),
         attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key))
-          .map(x => { const m = x.key.match(/\((110|50) مل\)/); return m ? `${x.value} ${m[1]}مل` : x.value; }) }))
+          .map(x => {
+            const m = x.key.match(/\((110|50) مل\)/), extra = x.value.match(EXTRA_RE);
+            const name = x.value.replace(EXTRA_RE, '');
+            return m ? `${name} ${m[1]}مل${extra ? ` (+${extra[1]} د.أ)` : ''}` : x.value;
+          }) }))
     };
   }
   const orderState = o => (o.cancelled ? 'cancelled'
@@ -885,7 +898,7 @@
       if (li.attrs.some(a => a.key === 'للعرض')) continue;   // the top-grade difference line
       const picks = li.attrs.filter(a => !a.key.startsWith('_') && /\((110|50) مل\)/.test(a.key));
       const entries = picks.length
-        ? picks.map(a => ({ name: a.value, size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية') }))
+        ? picks.map(a => ({ name: a.value.replace(EXTRA_RE, ''), size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية') }))
         : Array.from({ length: li.qty }, () => ({ name: li.title, size: /110/.test(li.variant) ? '110' : '50', gift: false }));
       for (const e of entries) {
         const top = e.name.includes('(نخب أول)');
