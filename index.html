@@ -909,10 +909,13 @@
       .formatToParts(new Date()).map(x => [x.type, x.value]));
     return { day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), hour: Number(p.hour) };
   }
-  // Delivery is the next day, except that nothing goes out on Friday.
+  // Two delivery days starting tomorrow (the day after from 6 PM on), skipping Friday.
   function deliveryText() {
-    const next = (ammanNow().day + 1) % 7;
-    return next === 5 ? 'التوصيل بكون السبت أو الأحد بإذن الله (لأن يوم الجمعة عطلة) 🌹' : `التوصيل بكون بكرا ${DAYS[next]} بإذن الله 🌹`;
+    const { day, hour } = ammanNow();
+    let d = (day + (hour >= 18 ? 2 : 1)) % 7, friday = day === 4;
+    const next = () => { if (d === 5) { friday = true; d = 6; } const r = d; d = (d + 1) % 7; return r; };
+    const a = next(), b = next();
+    return `التوصيل بكون ${DAYS[a]} أو ${DAYS[b]} بإذن الله${friday ? ' (لأن يوم الجمعة عطلة)' : ''} 🌹`;
   }
   function itemsText(o, wa = true) {
     const b = wa ? '*' : '';
