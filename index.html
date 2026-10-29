@@ -850,6 +850,18 @@
     return true;
   }
 
+  // Top-grade perfume → its exact name in the «الصنف» column of the sheet's «الإعدادات» tab, which the
+  // price and Omran-share formulas look up (store and sheet spell many of them differently).
+  const SHEET_GRADE_KEYS = {
+    blackafgano: 'بلاك افغانو\n(فقط صنف عالي)', imaginationlouisvuitton: 'ايماجنيشن', 'gd-of-fire': 'قو* اوف فاير\n(فقط صنف عالي)',
+    strongerwithyouintensely: 'يو انتنسلي', laytondemarly: 'لايتون ديمارلي\n(فقط صنف عالي)', 'oud-maracuj': 'عود ماراكوجا\n(فقط صنف عالي)',
+    strongerwithyousandalwood: 'يو صندل\n(فقط صنف عالي)', strongerwithyouparfum: 'يو بارفوم\n(فقط صنف عالي)', jazzclubreplica: 'جاز كلوب\n(فقط صنف عالي)',
+    lebeauleparfum: 'لي بو لي بارفوم', erosnajimversace: 'فرزاتشي ايروس نجم\n(فقط صنف عالي)', interludemanamouage: 'امواج انترلود\n(فقط صنف عالي)',
+    intenseoudgucci: 'قوتشي عود انتنس\n(فقط صنف عالي)', bleudechanel: 'بلو دي شانل\n(فقط صنف عالي)', sauvagedior: 'سوفاج\n(فقط صنف عالي)',
+    aventuscreed: 'كريد افينتوس\n(فقط صنف عالي)', biancolatte: 'بيانكو لاتيه\n(فقط صنف عالي)', 'summer-hammer': 'سمر همر',
+    sauvageelixir: 'سوفاج الكسير\n(فقط صنف عالي)'
+  };
+
   // The row the way the owner's sheet («الطلبات» tab) is filled by hand: English names with sizes, the
   // offer label its price lookup knows, and each top-grade pick in its own column pair.
   function sheetRow(o) {
@@ -866,7 +878,7 @@
         const top = e.name.includes('(نخب أول)');
         const base = e.name.replace(/\s*\((نخب أول|صنف عالي)\)\s*$/, '');
         lines.push(`${byTitle.get(base)?.english || base}${top ? ' (نخب أول)' : ''} ${e.size}ml`);
-        if (top) premium.push({ name: base, size: e.size + 'مل' });
+        if (top) premium.push({ name: SHEET_GRADE_KEYS[byTitle.get(base)?.handle] || base, size: e.size + 'مل' });
         if (e.gift) gift = true; else if (e.size === '110') n110++; else n50++;
       }
     }
