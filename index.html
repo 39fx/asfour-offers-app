@@ -977,8 +977,9 @@
         ? picks.map(a => ({ name: a.value.replace(EXTRA_RE, ''), size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية') }))
         : Array.from({ length: li.qty }, () => ({ name: li.title, size: /110/.test(li.variant) ? '110' : '50', gift: false }));
       for (const e of entries) {
-        const top = e.name.includes('(نخب أول)');
         const base = e.name.replace(/\s*\((نخب أول|صنف عالي)\)\s*$/, '');
+        // Top-grade-only perfumes at the normal price no longer carry the label in their name.
+        const top = e.name.includes('(نخب أول)') || !!byTitle.get(base)?.tags.includes('نخب-أول-فقط');
         lines.push(`${byTitle.get(base)?.english || base}${top ? ' (نخب أول)' : ''} ${e.size}ml`);
         if (top) premium.push({ name: SHEET_GRADE_KEYS[byTitle.get(base)?.handle] || base, size: e.size + 'مل' });
         if (e.gift) gift = true; else if (e.size === '110') n110++; else n50++;
