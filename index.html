@@ -484,7 +484,7 @@
   function statusBadges(p) {
     const b = [];
     if (p.status === 'DRAFT') b.push('<span class="badge badge--draft">مسودة</span>');
-    b.push(inStock(p) ? '<span class="badge badge--ok">متوفر</span>' : '<span class="badge badge--out">خلص</span>');
+    b.push(inStock(p) ? '<span class="badge badge--ok">متوفر</span>' : '<span class="badge badge--out">غير متوفر</span>');
     if (hidden(p)) b.push('<span class="badge badge--hidden">مخفي من العروض</span>');
     return b.join(' ');
   }
@@ -502,16 +502,15 @@
         default: return true;
       }
     });
-    const sorters = { priority: byPriority, name: (a, b) => a.title.localeCompare(b.title, 'ar'), stock: (a, b) => totalQty(a) - totalQty(b) };
+    const sorters = { priority: byPriority, name: (a, b) => a.title.localeCompare(b.title, 'ar'), stock: (a, b) => inStock(a) - inStock(b) || byPriority(a, b) };
     return list.sort(sorters[S.sort]);
   }
-  const totalQty = p => p.variants.reduce((s, v) => s + (v.tracked ? v.qty : 0), 0);
 
   function renderList() {
     const all = active();
     const stats = [
       ['all', 'كل العطور', all.length], ['shown', 'تظهر بالعروض', all.filter(visibleInOffers).length],
-      ['out', 'خلصت', all.filter(p => !inStock(p)).length], ['hidden', 'مخفية يدوياً', all.filter(hidden).length],
+      ['out', 'غير متوفرة', all.filter(p => !inStock(p)).length], ['hidden', 'مخفية يدوياً', all.filter(hidden).length],
       ['noprio', 'بدون أولوية', all.filter(p => p.priority == null).length]
     ];
     const list = filtered();
@@ -528,7 +527,7 @@
           <select class="input" style="width:auto" data-sort>
             <option value="priority" ${S.sort === 'priority' ? 'selected' : ''}>ترتيب الزبون (الأولوية)</option>
             <option value="name" ${S.sort === 'name' ? 'selected' : ''}>الاسم</option>
-            <option value="stock" ${S.sort === 'stock' ? 'selected' : ''}>الكمية (الأقل أولاً)</option>
+            <option value="stock" ${S.sort === 'stock' ? 'selected' : ''}>غير المتوفر أولاً</option>
           </select>
           <button class="btn btn--primary" data-add>+ إضافة عطر</button>
           <button class="btn" data-renumber title="يعيد ترقيم الأولويات بالتسلسل مع الحفاظ على نفس الترتيب">إعادة ترقيم</button>
@@ -537,7 +536,7 @@
           <b>${S.selected.size} محدد</b>
           <button class="btn btn--sm" data-bulk="show">إظهار في العروض</button>
           <button class="btn btn--sm" data-bulk="hide">إخفاء من العروض</button>
-          <button class="btn btn--sm" data-bulk="out">تعليم «خلص»</button>
+          <button class="btn btn--sm" data-bulk="out">تعليم «غير متوفر»</button>
           <button class="btn btn--sm" data-bulk="in">تعليم «متوفر»</button>
           <button class="btn btn--sm" data-bulk="top">رفع للأعلى</button>
           <button class="btn btn--sm btn--danger" data-bulk="archive">حذف (أرشفة)</button>
@@ -565,10 +564,9 @@
         <button class="icon-btn" data-move="down" title="بعد العطر الذي تحته" aria-label="للأسفل">▼</button>
       </span>
       <span class="c-cats chips">${cats.map(c => `<span class="chip">${esc(c.title)}</span>`).join('') || '<span class="muted small">—</span>'}</span>
-      <span class="c-stock stock-cell">${statusBadges(p)}<span class="muted small">الكمية: ${p.variants.map(v => `${esc(v.title)} ${v.tracked ? v.qty : '∞'}`).join(' · ')}</span></span>
+      <span class="c-stock stock-cell">${statusBadges(p)}</span>
       <span class="c-act actions">
-        <label class="switch" title="يظهر داخل العروض"><input type="checkbox" data-toggle-offer ${hidden(p) ? '' : 'checked'}><span></span></label>
-        <button class="btn btn--sm" data-stock>${inStock(p) ? 'خلص' : 'رجع متوفر'}</button>
+        <label class="switch" title="${inStock(p) ? 'متوفر — اضغط ليصير غير متوفر' : 'غير متوفر — اضغط ليرجع متوفر'}"><input type="checkbox" data-toggle-stock ${inStock(p) ? 'checked' : ''}><span></span></label>
         <button class="btn btn--sm" data-edit>تعديل</button>
       </span>
     </div>`;
@@ -806,9 +804,11 @@
     });
   }
 
-  async function setAvailability(p, available, qty) {
-    const map = new Map(p.variants.map(v => [v.id, available ? qty : 0]));
-    await run(available ? 'رجع متوفر' : 'تم تعليمه «خلص»', async () => {
+  // Stock is just on/off: "available" is a large tracked quantity, "not available" is 0 (hidden from cards and offers).
+  const IN_STOCK_QTY = 999;
+  async function setAvailability(p, available) {
+    const map = new Map(p.variants.map(v => [v.id, available ? IN_STOCK_QTY : 0]));
+    await run(available ? 'صار متوفر' : 'صار غير متوفر (انشال من العروض)', async () => {
       await api.setStock(p, map);
       p.variants.forEach(v => { v.qty = map.get(v.id); v.tracked = true; });
     });
@@ -831,13 +831,11 @@
     });
   }
   const confirmBox = msg => ask(msg, { danger: true });
-  async function askQty() { const v = await ask('الكمية المتوفرة لكل حجم:', { input: '50' }); return v == null ? null : Math.max(0, parseInt(v, 10) || 0); }
 
   async function bulk(action) {
     const list = [...S.selected].map(find).filter(Boolean);
     if (!list.length) return;
-    let qty = 50;
-    if (action === 'in') { qty = await askQty(); if (qty == null) return; }
+    const qty = IN_STOCK_QTY;
     if (action === 'archive' && !await confirmBox(`حذف ${list.length} عطر؟ سيتم نقلها إلى «المحذوفة» وتقدر ترجعها.`)) return;
     if (action === 'clear') { S.selected.clear(); return render(); }
     if (action === 'top') {
@@ -876,8 +874,8 @@
 
   function openEdit(p) {
     const isNew = !p;
-    const sizes = isNew ? [{ name: '110ML', price: '15', compareAt: '', qty: 50 }, { name: '50ML', price: '11', compareAt: '', qty: 50 }]
-      : p.variants.map(v => ({ id: v.id, name: v.title, price: Number(v.price), compareAt: v.compareAt ? Number(v.compareAt) : '', qty: v.tracked ? v.qty : '' }));
+    const sizes = isNew ? [{ name: '110ML', price: '15', compareAt: '30' }, { name: '50ML', price: '11', compareAt: '22' }]
+      : p.variants.map(v => ({ id: v.id, name: v.title, price: Number(v.price), compareAt: v.compareAt ? Number(v.compareAt) : '' }));
     const maxPrio = Math.max(0, ...active().map(x => x.priority ?? 0));
     dlg.innerHTML = `<form method="dialog" data-form>
       <div class="dlg-head"><h2 style="margin:0">${isNew ? 'إضافة عطر جديد' : 'تعديل: ' + esc(p.title)}</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
@@ -891,15 +889,14 @@
         </div>
         <div class="field"><label>التصنيفات التي يظهر فيها للزبائن</label><div class="checks">${catChecks(p)}</div></div>
         ${isNew ? `<div class="field"><label>الجنس</label><div class="checks">${GENDERS.map((g, i) => `<label><input type="radio" name="gender" value="${g}" ${i === 0 ? 'checked' : ''}> ${g}</label>`).join('')}</div></div>` : ''}
-        <div class="field"><label>الأحجام والأسعار والكمية</label>
-          <table class="vtable"><thead><tr><th>الحجم</th><th>السعر</th><th>قبل الخصم</th><th>الكمية</th></tr></thead><tbody>
+        <div class="field"><label>الأحجام والأسعار</label>
+          <table class="vtable"><thead><tr><th>الحجم</th><th>السعر</th><th>قبل الخصم</th></tr></thead><tbody>
           ${sizes.map((s, i) => `<tr data-size="${i}"><td>${isNew ? `<input class="input" name="sname" value="${esc(s.name)}" style="width:80px">` : esc(s.name)}</td>
             <td><input class="input" name="price" type="number" step="0.5" min="0" value="${s.price}"></td>
-            <td><input class="input" name="compare" type="number" step="0.5" min="0" value="${s.compareAt}"></td>
-            <td><input class="input" name="qty" type="number" min="0" value="${s.qty}" placeholder="غير محدود"></td></tr>`).join('')}
+            <td><input class="input" name="compare" type="number" step="0.5" min="0" value="${s.compareAt}"></td></tr>`).join('')}
           </tbody></table>
-          <span class="muted small">الكمية 0 = «خلص» ولا يظهر في العروض.</span>
         </div>
+        <label class="checks" style="margin-bottom:4px"><label class="switch"><input type="checkbox" name="available" ${!p || inStock(p) ? 'checked' : ''}><span></span></label> <b>متوفر</b> <span class="muted small">(لما يكون طافي: ما بيظهر للزبائن ولا بالعروض)</span></label>
         <div class="field"><label>${isNew ? 'صورة العطر' : 'تغيير الصورة (اختياري)'}</label>
           <input class="input" type="file" name="image" accept="image/*">
           ${p?.image ? `<img class="thumb" src="${esc(p.image)}" alt="" style="margin-top:6px">` : ''}</div>
@@ -938,7 +935,7 @@
   function readSizes(form) {
     return [...form.querySelectorAll('[data-size]')].map(tr => ({
       name: tr.querySelector('[name=sname]')?.value.trim(), price: tr.querySelector('[name=price]').value || '0',
-      compareAt: tr.querySelector('[name=compare]').value, qty: tr.querySelector('[name=qty]').value
+      compareAt: tr.querySelector('[name=compare]').value
     }));
   }
 
@@ -972,10 +969,11 @@
 
     const sizes = readSizes(form);
     const priceRows = [], stock = new Map();
+    const available = fd.get('available') === 'on';
     p.variants.forEach((v, i) => {
       const s = sizes[i];
       if (Number(s.price) !== Number(v.price) || Number(s.compareAt || 0) !== Number(v.compareAt || 0)) priceRows.push({ id: v.id, price: s.price, compareAt: s.compareAt });
-      if (s.qty !== '' && (!v.tracked || Number(s.qty) !== v.qty)) stock.set(v.id, Math.max(0, parseInt(s.qty, 10) || 0));
+      if (available !== inStock(p)) stock.set(v.id, available ? IN_STOCK_QTY : 0);
     });
     await api.updatePrices(p, priceRows);
     priceRows.forEach(r => Object.assign(p.variants.find(v => v.id === r.id), { price: r.price, compareAt: r.compareAt || null }));
@@ -998,7 +996,7 @@
     const title = fd.get('title').trim();
     if (active().some(p => p.title === title)) throw new Error('يوجد عطر بنفس الاسم');
     const gender = fd.get('gender');
-    const sizes = readSizes(form).filter(s => s.name).map(s => ({ ...s, qty: s.qty === '' ? 0 : Math.max(0, parseInt(s.qty, 10) || 0) }));
+    const sizes = readSizes(form).filter(s => s.name).map(s => ({ ...s, qty: fd.get('available') === 'on' ? IN_STOCK_QTY : 0 }));
     if (!sizes.length) throw new Error('أضف حجماً واحداً على الأقل');
     const wanted = new Set(fd.getAll('cat'));
     // Tags drive the automatic categories, so put them on at creation time.
@@ -1039,7 +1037,7 @@
     if (!p) return;
     if (el.matches('[data-sel]')) { el.checked ? S.selected.add(p.id) : S.selected.delete(p.id); return render(); }
     if (el.matches('[data-prio]')) { const v = num(el.value); if (v !== p.priority && v != null) savePriority(p, v); }
-    if (el.matches('[data-toggle-offer]')) toggleHidden(p, !el.checked);
+    if (el.matches('[data-toggle-stock]')) setAvailability(p, el.checked);
   });
 
   app.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-prio]')) e.target.blur(); });
@@ -1056,11 +1054,6 @@
     if (!p) return;
     if (el.matches('[data-edit]')) return openEdit(p);
     if (el.dataset.move) return move(p, el.dataset.move);
-    if (el.matches('[data-stock]')) {
-      if (inStock(p)) return setAvailability(p, false);
-      const qty = await askQty(); if (qty == null) return;
-      return setAvailability(p, true, qty);
-    }
     if (el.matches('[data-restore]')) return run('تم استرجاع العطر', async () => { await api.setStatus(p, 'ACTIVE'); p.status = 'ACTIVE'; });
     if (el.matches('[data-destroy]')) {
       if (!await confirmBox(`حذف «${p.title}» نهائياً؟ لا يمكن التراجع عن هذا.`)) return;
