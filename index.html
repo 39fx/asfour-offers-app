@@ -206,6 +206,45 @@
     .order__items { background: #f8f6f0; border: 1px solid #efebe1; border-radius: 12px; padding: 10px 12px; line-height: 1.85; }
     .order__foot > b { font-size: 17px; color: var(--primary); }
     .order.is-cancelled:hover { background: var(--danger-soft); }
+    .order.is-open { background: #fcfbf8; }
+
+    /* Order details, laid out like the old site's admin: quick copies, recipient, perfumes */
+    .odet { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+    .odet__quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; }
+    .odet__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 12px; align-items: start; }
+    .odet__box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .odet__h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 800; font-size: 14px; }
+    .odet__copy { padding: 4px 10px; font-size: 12px; background: var(--primary-soft); border-color: transparent; color: var(--primary); white-space: nowrap; }
+    .odet__copy:hover { background: var(--primary); color: #fff; }
+    .odet__field { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #f8f6f0; border: 1px solid #efebe1; border-radius: 12px; padding: 9px 11px; }
+    .odet__field small { display: block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    .odet__field b { font-size: 15px; }
+    .odet__field--addr { align-items: flex-start; line-height: 1.9; font-size: 13px; }
+    .odet__field--addr b { font-size: 13px; }
+    .odet__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .odet__note { background: var(--gold-soft); border: 1px solid #f0dfb3; border-radius: 12px; padding: 9px 11px; font-size: 13px; white-space: pre-line; }
+    .odet__note small { display: block; font-weight: 700; color: #8a5a06; margin-bottom: 2px; }
+    .odet__item { border: 1px solid #f0dfb3; background: #fffdf7; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .odet__item-h { display: flex; align-items: center; gap: 10px; }
+    .odet__item-h img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; background: #eee; }
+    .odet__badge { display: inline-block; background: #d97706; color: #fff; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; margin-inline-end: 6px; }
+    .odet__price { color: var(--primary); white-space: nowrap; }
+    .odet__picks { display: flex; flex-direction: column; gap: 6px; }
+    .odet__picks-h { font-size: 12px; font-weight: 700; color: #92400e; }
+    .odet__pick { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #f3e8cc; border-radius: 10px; padding: 7px 9px; }
+    .odet__pick img, .odet__noimg { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex: none; background: #f1eee6; }
+    .odet__pick b { font-size: 13px; }
+    .odet__n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: #b45309; color: #fff; font-size: 11px; font-weight: 800; }
+    .odet__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+    .odet__tags span { font-size: 11px; border-radius: 999px; padding: 0 7px; background: #f1eee6; color: var(--muted); font-weight: 700; }
+    .odet__tags .is-top { background: var(--primary-soft); color: var(--primary); }
+    .odet__tags .is-extra { background: var(--gold-soft); color: #8a5a06; }
+    .odet__tags .is-gift { background: #fde8e8; color: #b42318; }
+    .odet__sum { border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+    .odet__sum div { display: flex; justify-content: space-between; }
+    .odet__sum .is-total { font-size: 15px; font-weight: 800; color: var(--primary); }
+    @media (max-width: 860px) { .odet__grid { grid-template-columns: 1fr; } .odet__copy { font-size: 11px; } }
+    @media (max-width: 480px) { .odet__pair { grid-template-columns: 1fr; } }
     .toast { border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .2); }
     @media (max-width: 860px) { .wrap { padding: 12px; } .hero { padding: 16px 16px 32px; } .hero h1 { font-size: 18px; } .tabs { margin-inline: 8px; } .stat b { font-size: 20px; } }
   </style>
@@ -255,7 +294,7 @@
 
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
               priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
-              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null };
+              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null, openOrders: new Set() };
 
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -881,20 +920,24 @@
   // What the sheet shows for a confirmed order that has no later status yet.
   const SHEET_CONFIRMED = 'قيد التوصيل';
   const ORDER_FIELDS = `id name createdAt cancelledAt tags note
-    totalPriceSet { shopMoney { amount } } phone
+    totalPriceSet { shopMoney { amount } } subtotalPriceSet { shopMoney { amount } } totalShippingPriceSet { shopMoney { amount } } phone
     customer { firstName lastName phone }
     shippingAddress { firstName lastName phone address1 address2 city }
-    lineItems(first: 50) { nodes { title variantTitle quantity originalUnitPriceSet { shopMoney { amount } } customAttributes { key value } } }`;
+    lineItems(first: 50) { nodes { title variantTitle quantity image { url } originalUnitPriceSet { shopMoney { amount } } customAttributes { key value } } }`;
 
   function mapOrder(n) {
     const a = n.shippingAddress || {}, c = n.customer || {};
+    const phone = a.phone || n.phone || c.phone || '';
+    const total = Number(n.totalPriceSet.shopMoney.amount), shipping = Number(n.totalShippingPriceSet?.shopMoney.amount || 0);
     return {
       id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '',
-      total: Number(n.totalPriceSet.shopMoney.amount),
+      total, shipping, subtotal: Number(n.subtotalPriceSet?.shopMoney.amount ?? total - shipping),
       customer: [a.firstName || c.firstName, a.lastName || c.lastName].filter(Boolean).join(' ') || 'زبون',
-      phone: a.phone || n.phone || c.phone || '', city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' / '),
+      phone, city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' / '),
+      // A second number the customer gave elsewhere (contact field or account), if it differs.
+      altPhone: [n.phone, c.phone].find(p => p && waPhone(p) !== waPhone(phone)) || '',
       // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
-      items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount),
+      items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount), image: li.image?.url || '',
         attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key))
           .map(x => {
             const m = x.key.match(/\((110|50) مل\)/), extra = x.value.match(EXTRA_RE);
@@ -969,24 +1012,33 @@
     sauvageelixir: 'سوفاج الكسير\n(فقط صنف عالي)'
   };
 
+  // Line items that are real products (the top-grade difference line is internal; the total already includes it).
+  const orderLines = o => o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض'));
+  const slotAttrs = li => li.attrs.filter(a => !a.key.startsWith('_') && /\((110|50) مل\)/.test(a.key));
+  // One entry per perfume: the offer's picks, or a single perfume once per unit (its grade sits in the variant).
+  function itemEntries(li, byTitle) {
+    const picks = slotAttrs(li);
+    const raw = picks.length
+      ? picks.map(a => ({ name: a.value.replace(EXTRA_RE, ''), size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية'), extra: Number(a.value.match(EXTRA_RE)?.[1] || 0) }))
+      : Array.from({ length: li.qty }, () => ({ name: li.title + (li.variant.includes('نخب أول') ? ' (نخب أول)' : ''), size: /110/.test(li.variant) ? '110' : '50', gift: false, extra: 0 }));
+    return raw.map(e => {
+      const base = e.name.replace(/\s*\((نخب أول|صنف عالي)\)\s*$/, ''), product = byTitle.get(base);
+      // Top-grade-only perfumes at the normal price no longer carry the label in their name.
+      return { ...e, base, product, top: e.name.includes('(نخب أول)') || !!product?.tags.includes('نخب-أول-فقط') };
+    });
+  }
+  const productsByTitle = () => new Map(S.products.map(p => [p.title, p]));
+
   // The row the way the owner's sheet («الطلبات» tab) is filled by hand: English names with sizes, the
   // offer label its price lookup knows, and each top-grade pick in its own column pair.
   function sheetRow(o) {
-    const byTitle = new Map(S.products.map(p => [p.title, p]));
+    const byTitle = productsByTitle();
     const lines = [], premium = [];
     let n110 = 0, n50 = 0, gift = false;
-    for (const li of o.items) {
-      if (li.attrs.some(a => a.key === 'للعرض')) continue;   // the top-grade difference line
-      const picks = li.attrs.filter(a => !a.key.startsWith('_') && /\((110|50) مل\)/.test(a.key));
-      const entries = picks.length
-        ? picks.map(a => ({ name: a.value.replace(EXTRA_RE, ''), size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية') }))
-        : Array.from({ length: li.qty }, () => ({ name: li.title, size: /110/.test(li.variant) ? '110' : '50', gift: false }));
-      for (const e of entries) {
-        const base = e.name.replace(/\s*\((نخب أول|صنف عالي)\)\s*$/, '');
-        // Top-grade-only perfumes at the normal price no longer carry the label in their name.
-        const top = e.name.includes('(نخب أول)') || !!byTitle.get(base)?.tags.includes('نخب-أول-فقط');
-        lines.push(`${byTitle.get(base)?.english || base}${top ? ' (نخب أول)' : ''} ${e.size}ml`);
-        if (top) premium.push({ name: SHEET_GRADE_KEYS[byTitle.get(base)?.handle] || base, size: e.size + 'مل' });
+    for (const li of orderLines(o)) {
+      for (const e of itemEntries(li, byTitle)) {
+        lines.push(`${e.product?.english || e.base}${e.top ? ' (نخب أول)' : ''} ${e.size}ml`);
+        if (e.top) premium.push({ name: SHEET_GRADE_KEYS[e.product?.handle] || e.base, size: e.size + 'مل' });
         if (e.gift) gift = true; else if (e.size === '110') n110++; else n50++;
       }
     }
@@ -1079,13 +1131,82 @@
         ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
           .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`)
       + '<button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
-    return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}" data-order-id="${o.id}">
+    const open = S.openOrders.has(o.id);
+    return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}${open ? ' is-open' : ''}" data-order-id="${o.id}">
       <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span><span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
       ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
-      <div class="order__items">${esc(itemsText(o, false))}</div>
-      <div class="order__foot"><b>${jod(o.total)}</b><span class="actions">${buttons}</span></div>
+      ${open ? orderDetail(o) : `<div class="order__items">${esc(itemsText(o, false))}</div>`}
+      <div class="order__foot"><b>${jod(o.total)}</b><span class="actions">
+        <button class="btn btn--sm" data-otoggle aria-expanded="${open}">${open ? '▲ إخفاء التفاصيل' : '📋 التفاصيل'}</button>${buttons}</span></div>
     </div>`;
+  }
+
+  // Jordan's governorates in English for the English shipping summary; anything else stays as typed.
+  const CITY_EN = { 'عمان': 'Amman', 'اربد': 'Irbid', 'الزرقاء': 'Zarqa', 'الزرقا': 'Zarqa', 'البلقاء': 'Balqa', 'السلط': 'Salt', 'مادبا': 'Madaba',
+    'الكرك': 'Karak', 'الطفيلة': 'Tafilah', 'معان': "Ma'an", 'العقبة': 'Aqaba', 'المفرق': 'Mafraq', 'جرش': 'Jerash', 'عجلون': 'Ajloun', 'الرصيفة': 'Russeifa' };
+  const cityEn = c => CITY_EN[String(c).trim().replace(/[أإآ]/g, 'ا').replace(/ّ/g, '')] || c;
+  const plainJod = n => `${+Number(n).toFixed(2)} JOD`;
+
+  // The copy-ready texts the old site's admin had: the sheet's «تفاصيل» cell and the shipping summary.
+  function orderTexts(o) {
+    const r = sheetRow(o);
+    const summary = (en) => en
+      ? `Customer Name: ${o.customer}\n\nPhone Number: ${r.phone}\n\nFull Address: ${[cityEn(o.city), o.address].filter(Boolean).join(' / ')}\n\nOrder Items (Excel Format):\n${r.details}\n\nTotal Amount (incl. delivery): ${plainJod(o.total)}`
+      : `اسم العميل: ${o.customer}\n\nرقم الهاتف: ${r.phone}\n\nالعنوان الكامل: ${r.location}\n\nتفاصيل العطور (لشيت جوجل):\n${r.details}\n\nالمبلغ الكلي شامل التوصيل: ${plainJod(o.total)}`;
+    return { sheet: r.details, en: summary(true), ar: summary(false), phone: r.phone, address: r.location };
+  }
+
+  function orderDetail(o) {
+    const t = orderTexts(o), byTitle = productsByTitle();
+    const copy = (text, label = 'نسخ') => `<button class="btn btn--sm odet__copy" data-copy="${esc(text)}">⧉ ${label}</button>`;
+    const field = (label, value, copyIt = true, ltr = false) => `<div class="odet__field"><div><small>${label}</small>
+      <b${ltr ? ' dir="ltr"' : ''}>${esc(value || 'لا يوجد')}</b></div>${copyIt && value ? copy(value) : ''}</div>`;
+    const lines = orderLines(o);
+    const items = lines.map(li => {
+      const offer = slotAttrs(li).length > 0, entries = itemEntries(li, byTitle);
+      const picks = offer ? `<div class="odet__picks"><div class="odet__picks-h">📦 عطور العرض المختارة من الزبون (${entries.length} عطور):</div>
+        ${entries.map((e, i) => {
+          const text = `${e.base} - ${e.size} مل${e.top ? ' (نخب أول)' : ''}${e.extra ? ` (+${e.extra.toFixed(2)} د.أ)` : ''}`;
+          return `<div class="odet__pick"><span class="odet__n">${i + 1}</span>
+            ${e.product?.image ? `<img src="${esc(e.product.image)}" alt="" loading="lazy">` : '<span class="odet__noimg"></span>'}
+            <div class="grow"><b>${esc(e.base)}</b><div class="odet__tags"><span>${e.size} مل</span>${e.top ? '<span class="is-top">نخب أول</span>' : ''}
+              ${e.extra ? `<span class="is-extra">+${e.extra.toFixed(2)} د.أ</span>` : ''}${e.gift ? '<span class="is-gift">🎁 هدية</span>' : ''}</div></div>
+            ${copy(text)}</div>`;
+        }).join('')}</div>` : '';
+      return `<div class="odet__item"><div class="odet__item-h">
+          ${li.image ? `<img src="${esc(li.image)}" alt="" loading="lazy">` : ''}
+          <div class="grow">${offer ? '<span class="odet__badge">🎁 عرض باقة</span>' : ''}<b>${esc(li.title)}</b>
+            <div class="muted small">${!offer && li.variant ? `${esc(li.variant)} · ` : ''}الكمية: ${li.qty}x</div></div>
+          <b class="odet__price">${plainJod(li.price * li.qty)}</b></div>${picks}</div>`;
+    }).join('');
+    return `<div class="odet">
+      <div class="odet__quick"><b>📋 نسخ سريع:</b>${copy(t.sheet, 'تفاصيل الطلب لشيت جوجل (English) 📊')}${copy(t.en, 'ملخص الشحن (English)')}${copy(t.ar, 'ملخص الشحن (عربي)')}</div>
+      <div class="odet__grid">
+        <section class="odet__box"><div class="odet__h"><span>👤 تفاصيل المستلم والعنوان</span>${copy(t.address, 'نسخ العنوان')}</div>
+          ${field('اسم المستلم', o.customer)}
+          <div class="odet__pair">${field('رقم الهاتف', t.phone, true, true)}${field('الهاتف البديل', o.altPhone, true, true)}</div>
+          <div class="odet__field odet__field--addr"><div><small>العنوان الكامل</small>
+            <div>المحافظة: <b>${esc(o.city || '—')}</b></div><div>المنطقة / المكان: <b>${esc(o.address || '—')}</b></div></div>${t.address ? copy(t.address) : ''}</div>
+          ${o.note ? `<div class="odet__note"><small>📝 ملاحظة الزبون</small>${esc(o.note)}</div>` : ''}
+        </section>
+        <section class="odet__box"><div class="odet__h"><span>🛍️ المنتجات المطلوبة (${lines.length})</span>${copy(t.sheet, 'نسخ لشيت جوجل 📊')}</div>
+          ${items}
+          <div class="odet__sum"><div><span>المجموع الفرعي:</span><b>${plainJod(o.subtotal)}</b></div>
+            <div><span>تكلفة التوصيل:</span><b>${o.shipping ? plainJod(o.shipping) : 'مجاني'}</b></div>
+            <div class="is-total"><span>المجموع الإجمالي الكلي:</span><b>${plainJod(o.total)}</b></div></div>
+        </section>
+      </div>
+    </div>`;
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const ta = Object.assign(document.createElement('textarea'), { value: text });
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    toast('انتسخ ✓');
   }
 
   async function orderAction(o, act) {
@@ -1573,6 +1694,12 @@ function reply(o) {
     if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
+    if (el.matches('[data-copy]')) return copyText(el.dataset.copy);
+    if (el.matches('[data-otoggle]')) {
+      const id = el.closest('[data-order-id]').dataset.orderId;
+      S.openOrders.has(id) ? S.openOrders.delete(id) : S.openOrders.add(id);
+      return render();
+    }
     if (el.dataset.oact) return orderAction(S.orders.find(o => o.id === el.closest('[data-order-id]').dataset.orderId), el.dataset.oact);
     if (el.dataset.filter) { S.filter = el.dataset.filter; return render(); }
     if (el.matches('[data-add]')) return openEdit(null);
