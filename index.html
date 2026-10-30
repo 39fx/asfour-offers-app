@@ -280,6 +280,7 @@
     .odet__sum div { display: flex; justify-content: space-between; }
     .odet__sum .is-total { font-size: 15px; font-weight: 800; color: var(--primary); }
     .odet__ship { border-color: #fbd5b5; background: #fffaf5; }
+    .btn--cancel { background: #fff; border-color: #f3c6c1; color: #a3271b; }
     .btn--ship { background: #fff4ea; border-color: #f6cfa8; color: #9a4b07; }
     .btn--ship.is-done { background: #ecfdf3; border-color: #b7ebc9; color: #15803d; font-family: ui-monospace, Consolas, monospace; }
     .odet__shipform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -982,6 +983,7 @@
   const ORDER_DEFAULTS = {
     new_order: 'السلام عليكم ،[وقت التحية] [اسم العميل] 🌹\n\nفي عندك اوردر من عطور عصفور تفاصيله\n\n[تفاصيل العطور]\n\nسعر الاوردر شامل التوصيل : *[المبلغ]*\n\nالعنوان : [العنوان]\n\nالعطور بتيجي بزجاجنا الخاص \n[موعد التوصيل]\n---\nبتحب نأكد الطلب ؟',
     confirmed: 'تم تأكيد طلبك بنجاح من عطور عصفور 👑✨\n\nطلبك الآن قيد التجهيز بعناية، و[موعد التوصيل]\nإذا كان لديك أي استفسار أو تعديل نحن دائماً بخدمتك.\nشكراً لاختيارك وثقتك بعطور عصفور 🕊️',
+    cancelled: 'تم إلغاء طلبك رقم #[رقم الطلب] ❌\n\nإذا كان لديك أي استفسار أو ترغب في إعادة الطلب، يمكنك التواصل معنا في أي وقت.\n\nشكرًا لتواصلك مع عطور عصفور 🕊️✨',
     sheet_url: '', secret: ''
   };
   const ORDER_STATES = { new: ['جديد', 'badge--draft'], sent: ['بانتظار رد الزبون', 'badge--hidden'], confirmed: ['مؤكد', 'badge--ok'],
@@ -1203,6 +1205,7 @@
       + (o.cancelled ? '' : `<select class="input" data-ostatus style="width:auto;padding:4px 8px">
         ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
           .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`)
+      + (st === 'cancelled' ? '' : '<button class="btn btn--sm btn--cancel" data-oact="cancel">❌ انلغى الأوردر</button>')
       + '<button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
     // Delivery: one click uploads with the area the customer picked (or the guess); once uploaded, the barcode opens the details.
     const barcode = shipBarcode(o);
@@ -1396,28 +1399,31 @@
       if (!openWhatsApp(o, fillMessage(st.new_order, o)) || o.tags.includes(TAG_SENT)) return;
       return run('', async () => { await api.addTags(o, [TAG_SENT]); o.tags.push(TAG_SENT); });
     }
+    // Messages go out from the shop's number through the orders worker, after the owner says so.
+    const canSend = DEMO || (st.worker_url && st.worker_key && waPhone(o.phone));
+    const noPhone = '\nما في رقم واتساب على الطلب، فما رح تنبعت رسالة.';
     if (act === 'confirm') {
-      // The confirmation goes out from the shop's number through the orders worker, after the owner says so.
-      const canSend = DEMO || (st.worker_url && st.worker_key && waPhone(o.phone));
-      const how = await choose(`تأكيد الطلب ${o.name} (${o.customer})؟${canSend ? '\nرسالة التأكيد بتنبعت للزبون على الواتساب لحالها.' : '\nما في رقم واتساب على الطلب، فما رح تنبعت رسالة.'}`,
+      const how = await choose(`تأكيد الطلب ${o.name} (${o.customer})؟${canSend ? '\nرسالة التأكيد بتنبعت للزبون على الواتساب لحالها.' : noPhone}`,
         canSend ? [['send', '✅ تأكيد وإرسال الرسالة', 'btn--primary'], ['quiet', 'تأكيد بدون رسالة']] : [['quiet', '✅ تأكيد', 'btn--primary']]);
       if (!how) return;
       return run('', async () => {
         if (st.sheet_url) await postToSheet(o);
         await api.addTags(o, [TAG_CONFIRMED]); o.tags.push(TAG_CONFIRMED);
-        let sent = '';
-        if (how === 'send') {
-          try {
-            if (!DEMO) {
-              const r = await fetch(`${st.worker_url}/send`, { method: 'POST', headers: { 'X-Asfour-Key': st.worker_key, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: o.phone, text: fillMessage(st.confirmed, o) }) }).then(x => x.json());
-              if (!r.ok) throw new Error(r.error);
-            }
-            sent = ' وانبعتت رسالة التأكيد ✓';
-          } catch (e) { sent = ` بس الرسالة ما انبعتت (${e.message}). ابعتها يدوي`; }
-        }
-        toast((st.sheet_url ? 'تم التأكيد وانرفع على الشيت' : 'تم التأكيد') + sent, sent.includes('ما انبعتت'));
+        const err = how === 'send' ? await sendText(o, fillMessage(st.confirmed, o)) : null;
+        const done = st.sheet_url ? 'تم التأكيد وانرفع على الشيت' : 'تم التأكيد';
+        toast(how !== 'send' ? done : err ? `${done} بس الرسالة ما انبعتت (${err}). ابعتها يدوي` : `${done} وانبعتت رسالة التأكيد ✓`, !!err);
       });
+    }
+    if (act === 'cancel') {
+      const how = await choose(`إلغاء الطلب ${o.name} (${o.customer})؟${canSend ? '\nرسالة «تم إلغاء طلبك» بتنبعت للزبون على الواتساب.' : noPhone}`,
+        canSend ? [['send', '❌ إلغاء وإرسال الرسالة', 'btn--danger'], ['quiet', 'إلغاء بدون رسالة']] : [['quiet', '❌ إلغاء الطلب', 'btn--danger']], 'رجوع');
+      if (!how) return;
+      await orderStatus(o, 'cancelled');
+      if (how === 'send') {
+        const err = await sendText(o, fillMessage(st.cancelled, o));
+        toast(err ? `انلغى الطلب بس الرسالة ما انبعتت (${err})` : 'انلغى الطلب وانبعتت رسالة الإلغاء ✓', !!err);
+      }
+      return;
     }
     if (act === 'unconfirm') {
       if (!await confirmBox(`إرجاع ${o.name} لغير مؤكد؟ السطر اللي على الشيت بضل، احذفه يدوي إذا بدك.`)) return;
@@ -1428,6 +1434,17 @@
       if (!await confirmBox(`حذف الطلب ${o.name} (${o.customer}) نهائياً من شوبيفاي؟ لا يمكن التراجع عن هذا.${sheet}`)) return;
       return run(`انحذف الطلب ${o.name}`, async () => { await api.deleteOrder(o); S.orders = S.orders.filter(x => x !== o); });
     }
+  }
+
+  // WhatsApp from the shop's number via the orders worker; returns null when sent, else the reason.
+  async function sendText(o, text) {
+    if (DEMO) return null;
+    const st = S.orderSettings;
+    try {
+      const r = await fetch(`${st.worker_url}/send`, { method: 'POST', headers: { 'X-Asfour-Key': st.worker_key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: o.phone, text }) }).then(x => x.json());
+      return r.ok ? null : r.error || 'خطأ';
+    } catch (e) { return e.message; }
   }
 
   async function orderStatus(o, next) {
@@ -1533,6 +1550,7 @@ function reply(o) {
         <div class="field"><label>رسالة التأكيد (أول ما يطلب الزبون)</label><textarea class="input" name="new_order" rows="9">${esc(st.new_order)}</textarea></div>
         <div class="field"><label>رسالة «تم تأكيد طلبك»</label><textarea class="input" name="confirmed" rows="6">${esc(st.confirmed)}</textarea>
           <span class="muted small">المتغيرات: ${vars}. استخدم *نص* للخط العريض بالواتساب. سطر فيه <b>---</b> بيقسم رسالة التأكيد لرسالتين بتنبعتوا ورا بعض.</span></div>
+        <div class="field"><label>رسالة «تم إلغاء طلبك» (زر «انلغى الأوردر»)</label><textarea class="input" name="cancelled" rows="5">${esc(st.cancelled)}</textarea></div>
 
         <h2 style="margin:18px 0 8px">ربط جوجل شيت</h2>
         <ol class="steps">
@@ -1565,7 +1583,7 @@ function reply(o) {
       const url = form.sheet_url.value.trim();
       if (url && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return toast('الرابط لازم يكون رابط Web app من Apps Script وينتهي بـ /exec', true);
       const btn = $('[data-save]', dlg); btn.disabled = true; btn.textContent = 'جاري الحفظ…';
-      const v = { ...st, new_order: form.new_order.value, confirmed: form.confirmed.value, sheet_url: url, secret };
+      const v = { ...st, new_order: form.new_order.value, confirmed: form.confirmed.value, cancelled: form.cancelled.value, sheet_url: url, secret };
       try {
         await api.saveOrderSettings(v); S.orderSettings = v;
         // The automatic message uses the same text; hand it to the orders worker too.
@@ -1674,10 +1692,10 @@ function reply(o) {
   }
   const confirmBox = msg => ask(msg, { danger: true });
   // Several answers; resolves with the chosen value, or null for «إلغاء».
-  function choose(msg, choices) {
+  function choose(msg, choices, back = 'إلغاء') {
     return new Promise(resolve => {
       askDlg.innerHTML = `<form method="dialog"><div class="dlg-body"><p style="margin-top:0;white-space:pre-line">${esc(msg)}</p></div>
-        <div class="dlg-foot">${choices.map(([v, label, cls = '']) => `<button class="btn ${cls}" value="${v}">${esc(label)}</button>`).join('')}<button class="btn" value="cancel">إلغاء</button></div></form>`;
+        <div class="dlg-foot">${choices.map(([v, label, cls = '']) => `<button class="btn ${cls}" value="${v}">${esc(label)}</button>`).join('')}<button class="btn" value="cancel">${esc(back)}</button></div></form>`;
       askDlg.onclose = () => resolve(askDlg.returnValue && askDlg.returnValue !== 'cancel' ? askDlg.returnValue : null);
       askDlg.returnValue = '';
       askDlg.showModal();
