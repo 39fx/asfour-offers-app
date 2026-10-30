@@ -988,7 +988,7 @@
   const STATUS_TAGS = { postponed: ['مؤجل', 'مؤجل'], delivered: ['تم-التسليم', 'تم التوصيل'], cancelled: ['ملغي', 'ملغي'] };
   // What the sheet shows for a confirmed order that has no later status yet.
   const SHEET_CONFIRMED = 'قيد التوصيل';
-  const ORDER_FIELDS = `id name createdAt cancelledAt tags note
+  const ORDER_FIELDS = `id name createdAt cancelledAt tags note customAttributes { key value }
     totalPriceSet { shopMoney { amount } } subtotalPriceSet { shopMoney { amount } } totalShippingPriceSet { shopMoney { amount } } phone
     customer { firstName lastName phone }
     shippingAddress { firstName lastName phone address1 address2 city }
@@ -1000,11 +1000,13 @@
     const total = Number(n.totalPriceSet.shopMoney.amount), shipping = Number(n.totalShippingPriceSet?.shopMoney.amount || 0);
     return {
       id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '',
+      // Orders from the cart page carry the Direct Delivery area the customer picked.
+      deliveryVillage: Number((n.customAttributes || []).find(a => a.key === '_delivery_village_id')?.value) || 0,
       total, shipping, subtotal: Number(n.subtotalPriceSet?.shopMoney.amount ?? total - shipping),
       customer: [a.firstName || c.firstName, a.lastName || c.lastName].filter(Boolean).join(' ') || 'زبون',
       phone, city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' / '),
       // A second number the customer gave elsewhere (contact field or account), if it differs.
-      altPhone: [n.phone, c.phone].find(p => p && waPhone(p) !== waPhone(phone)) || '',
+      altPhone: [n.phone, c.phone].find(p => p && waPhone(p) !== waPhone(phone)) || (n.customAttributes || []).find(a => a.key === 'رقم بديل')?.value || '',
       // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
       items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount), image: li.image?.url || '',
         attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key))
@@ -1296,6 +1298,7 @@
   // A first guess from what the customer typed: the governorate named in the city field (Shopify's city is
   // usually it), then the longest area name found in the city and address, looking inside that governorate only.
   function guessArea(o) {
+    if (o.deliveryVillage) for (const [g, areas] of DELIVERY_AREAS) if (areas.some(a => a[2] === o.deliveryVillage)) return { gov: g, area: o.deliveryVillage };
     const text = normAr(`${o.city} ${o.address}`), city = normAr(o.city);
     const gov = DELIVERY_AREAS.find(([g]) => city.includes(normAr(g).replace(/^ال/, '').replace(/ء$/, '')))?.[0];
     let best = null;
