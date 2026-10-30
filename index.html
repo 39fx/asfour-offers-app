@@ -280,6 +280,8 @@
     .odet__sum div { display: flex; justify-content: space-between; }
     .odet__sum .is-total { font-size: 15px; font-weight: 800; color: var(--primary); }
     .odet__ship { border-color: #fbd5b5; background: #fffaf5; }
+    .btn--ship { background: #fff4ea; border-color: #f6cfa8; color: #9a4b07; }
+    .btn--ship.is-done { background: #ecfdf3; border-color: #b7ebc9; color: #15803d; font-family: ui-monospace, Consolas, monospace; }
     .odet__shipform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
     .odet__shipform label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); font-weight: 600; }
     .odet__ship > .btn--primary { align-self: flex-start; }
@@ -1202,6 +1204,10 @@
         ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
           .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`)
       + '<button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
+    // Delivery: one click uploads with the area the customer picked (or the guess); once uploaded, the barcode opens the details.
+    const barcode = shipBarcode(o);
+    const ship = barcode ? `<button class="btn btn--sm btn--ship is-done" data-otoggle title="رقم الشحنة">🚚 ${esc(barcode)}</button>`
+      : o.cancelled || st === 'cancelled' ? '' : '<button class="btn btn--sm btn--ship" data-ship="create">🚚 رفع لشركة التوصيل</button>';
     const open = S.openOrders.has(o.id);
     return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}${open ? ' is-open' : ''}" data-order-id="${o.id}">
       <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span><span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
@@ -1209,7 +1215,7 @@
       ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
       ${open ? orderDetail(o) : `<div class="order__items">${esc(itemsText(o, false))}</div>`}
       <div class="order__foot"><b>${jod(o.total)}</b><span class="actions">
-        <button class="btn btn--sm" data-otoggle aria-expanded="${open}">${open ? '▲ إخفاء التفاصيل' : '📋 التفاصيل'}</button>${buttons}</span></div>
+        ${ship}<button class="btn btn--sm" data-otoggle aria-expanded="${open}">${open ? '▲ إخفاء التفاصيل' : '📋 التفاصيل'}</button>${buttons}</span></div>
     </div>`;
   }
 
@@ -1352,9 +1358,11 @@
     const barcode = shipBarcode(o), q = `barcode=${encodeURIComponent(barcode)}&order=${encodeURIComponent(o.id.split('/').pop())}`;
     if (act === 'create') {
       const area = pickedArea(o), gov = shipPick(o).gov;
-      if (!area) return toast('اختار المحافظة والمنطقة أول', true);
       if (!o.phone) return toast('ما في رقم هاتف على الطلب، شركة التوصيل بتحتاجه', true);
-      const cod = Number(box.querySelector('[data-ship-cod]').value), notes = box.querySelector('[data-ship-notes]').value.trim();
+      // From the row button with no area known yet: open the details so the area can be picked there.
+      if (!area) { S.openOrders.add(o.id); render(); return toast('اختار المحافظة والمنطقة بقسم شركة التوصيل', true); }
+      // The details' fields when they are open, else the order's own total and note.
+      const cod = Number(box.querySelector('[data-ship-cod]')?.value ?? o.total), notes = (box.querySelector('[data-ship-notes]')?.value ?? o.note).trim();
       if (!await confirmBox(`رفع الطلب ${o.name} لشركة التوصيل؟\n${o.customer} · ${gov} / ${area[0]} · تحصيل ${cod} د.أ`)) return;
       return run('انرفع الطلب لشركة التوصيل ✓', async () => {
         const r = await call('ship', 'POST', { orderId: o.id.split('/').pop(), invoice: o.name.replace('#', ''), name: o.customer, phone: sheetRow(o).phone,
@@ -1389,10 +1397,26 @@
       return run('', async () => { await api.addTags(o, [TAG_SENT]); o.tags.push(TAG_SENT); });
     }
     if (act === 'confirm') {
-      openWhatsApp(o, fillMessage(st.confirmed, o));
-      return run(st.sheet_url ? 'تم التأكيد وانرفع الطلب على الشيت' : 'تم التأكيد (الشيت مش مربوط، اربطه من الإعدادات)', async () => {
+      // The confirmation goes out from the shop's number through the orders worker, after the owner says so.
+      const canSend = DEMO || (st.worker_url && st.worker_key && waPhone(o.phone));
+      const how = await choose(`تأكيد الطلب ${o.name} (${o.customer})؟${canSend ? '\nرسالة التأكيد بتنبعت للزبون على الواتساب لحالها.' : '\nما في رقم واتساب على الطلب، فما رح تنبعت رسالة.'}`,
+        canSend ? [['send', '✅ تأكيد وإرسال الرسالة', 'btn--primary'], ['quiet', 'تأكيد بدون رسالة']] : [['quiet', '✅ تأكيد', 'btn--primary']]);
+      if (!how) return;
+      return run('', async () => {
         if (st.sheet_url) await postToSheet(o);
         await api.addTags(o, [TAG_CONFIRMED]); o.tags.push(TAG_CONFIRMED);
+        let sent = '';
+        if (how === 'send') {
+          try {
+            if (!DEMO) {
+              const r = await fetch(`${st.worker_url}/send`, { method: 'POST', headers: { 'X-Asfour-Key': st.worker_key, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: o.phone, text: fillMessage(st.confirmed, o) }) }).then(x => x.json());
+              if (!r.ok) throw new Error(r.error);
+            }
+            sent = ' وانبعتت رسالة التأكيد ✓';
+          } catch (e) { sent = ` بس الرسالة ما انبعتت (${e.message}). ابعتها يدوي`; }
+        }
+        toast((st.sheet_url ? 'تم التأكيد وانرفع على الشيت' : 'تم التأكيد') + sent, sent.includes('ما انبعتت'));
       });
     }
     if (act === 'unconfirm') {
@@ -1649,6 +1673,17 @@ function reply(o) {
     });
   }
   const confirmBox = msg => ask(msg, { danger: true });
+  // Several answers; resolves with the chosen value, or null for «إلغاء».
+  function choose(msg, choices) {
+    return new Promise(resolve => {
+      askDlg.innerHTML = `<form method="dialog"><div class="dlg-body"><p style="margin-top:0;white-space:pre-line">${esc(msg)}</p></div>
+        <div class="dlg-foot">${choices.map(([v, label, cls = '']) => `<button class="btn ${cls}" value="${v}">${esc(label)}</button>`).join('')}<button class="btn" value="cancel">إلغاء</button></div></form>`;
+      askDlg.onclose = () => resolve(askDlg.returnValue && askDlg.returnValue !== 'cancel' ? askDlg.returnValue : null);
+      askDlg.returnValue = '';
+      askDlg.showModal();
+      $('button', askDlg).focus();
+    });
+  }
 
   async function bulk(action) {
     const list = [...S.selected].map(find).filter(Boolean);
