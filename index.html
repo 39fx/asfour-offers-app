@@ -208,6 +208,42 @@
     .order.is-cancelled:hover { background: var(--danger-soft); }
     .order.is-open { background: #fcfbf8; }
 
+    /* Perfumes table, the old site's catalogue layout */
+    .ptable { overflow-x: auto; }
+    .prow { display: grid; grid-template-columns: 26px 128px 56px minmax(170px, 1.6fr) 58px 58px 64px 92px 64px 64px 84px 118px 70px;
+      gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); min-width: 1120px; transition: background .12s; }
+    .prow:last-child { border-bottom: 0; }
+    .prow:not(.prow--head):hover { background: #faf9f5; }
+    .prow--head { background: #f8f6f0; font-size: 12px; font-weight: 800; color: var(--primary); }
+    .prow--head small { display: block; font-size: 10px; color: var(--muted); font-weight: 500; }
+    .prow.is-off .thumb, .prow.is-off .name { opacity: .55; }
+    .prow .thumb { width: 46px; height: 46px; border-radius: 50%; }
+    .prow .name b { font-size: 15px; }
+    .prow .name .small { color: #44504a; }
+    .pslug { display: block; font: 10px ui-monospace, Consolas, monospace; color: var(--muted); direction: ltr; text-align: end; }
+    .pnum { font-weight: 800; font-size: 15px; text-align: center; }
+    .pnum--old { color: var(--muted); text-decoration: line-through; font-weight: 600; }
+    .pgrade { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 10px; padding: 4px 8px; background: #f1eee6; color: var(--muted); text-align: center; }
+    .pgrade.is-top { background: var(--primary); color: #fff; }
+    .pgrade.is-both { background: #db2777; color: #fff; }
+    .pup { display: inline-block; min-width: 44px; text-align: center; border: 1.5px solid #f2a6c4; color: #9d174d; border-radius: 999px; padding: 2px 8px; font-weight: 800; }
+    .pstock { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; font-weight: 700; color: #15803d; background: #ecfdf3; border: 1px solid #b7ebc9; border-radius: 999px; padding: 3px 10px; }
+    .pstock.is-out { color: #b42318; background: #fef0ef; border-color: #f6c4bf; }
+    .pstock input { display: none; }
+    .pvis { display: inline-block; font-size: 11px; font-weight: 700; color: #15803d; background: #ecfdf3; border: 1px solid #b7ebc9; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+    .pvis.is-hidden { color: #b42318; background: #fef0ef; border-color: #f6c4bf; }
+    .pvis.is-draft { color: #8a5a06; background: var(--gold-soft); border-color: #f0dfb3; }
+    @media (max-width: 860px) {
+      .prow--head { display: none; }
+      /* Phones: a card per perfume; name line, then the numbers and badges wrap underneath */
+      .prow { min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 12px; }
+      .prow > .c-name { flex: 1 1 0; min-width: 140px; }
+      .prow > .c-prio { order: 10; flex-basis: 100%; }
+      .prow > .c-u110, .prow > .c-u50 { font-size: 12px; }
+      .prow [data-label]::before { content: attr(data-label) ": "; font-size: 11px; color: var(--muted); font-weight: 500; }
+      .pnum { text-align: start; font-size: 14px; }
+    }
+
     /* Order details, laid out like the old site's admin: quick copies, recipient, perfumes */
     .odet { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
     .odet__quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; }
@@ -243,7 +279,11 @@
     .odet__sum { border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
     .odet__sum div { display: flex; justify-content: space-between; }
     .odet__sum .is-total { font-size: 15px; font-weight: 800; color: var(--primary); }
-    @media (max-width: 860px) { .odet__grid { grid-template-columns: 1fr; } .odet__copy { font-size: 11px; } }
+    .odet__ship { border-color: #fbd5b5; background: #fffaf5; }
+    .odet__shipform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .odet__shipform label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .odet__ship > .btn--primary { align-self: flex-start; }
+    @media (max-width: 860px) { .odet__grid { grid-template-columns: 1fr; } .odet__copy { font-size: 11px; } .odet__shipform { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 480px) { .odet__pair { grid-template-columns: 1fr; } }
     .toast { border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .2); }
     @media (max-width: 860px) { .wrap { padding: 12px; } .hero { padding: 16px 16px 32px; } .hero h1 { font-size: 18px; } .tabs { margin-inline: 8px; } .stat b { font-size: 20px; } }
@@ -294,7 +334,7 @@
 
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
               priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
-              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null, openOrders: new Set() };
+              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null, openOrders: new Set(), ship: {}, shipStatus: {} };
 
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -654,10 +694,12 @@
   function filtered() {
     const q = S.q.trim().toLowerCase();
     let list = active().filter(p => {
-      if (q && !(p.title.toLowerCase().includes(q) || p.english.toLowerCase().includes(q))) return false;
+      if (q && !(p.title.toLowerCase().includes(q) || p.english.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q))) return false;
       if (S.cat && !p.collections.includes(S.cat)) return false;
       switch (S.filter) {
         case 'shown': return visibleInOffers(p);
+        case 'in': return inStock(p);
+        case 'top': return gradeInfo(p).grades !== 'normal';
         case 'out': return !inStock(p);
         case 'hidden': return hidden(p);
         case 'noprio': return p.priority == null;
@@ -668,12 +710,31 @@
     return list.sort(sorters[S.sort]);
   }
 
+  // Prices the theme reads from the variants (option1 size, option2 grade). A perfume tagged top-grade-only
+  // is the top grade as a whole; its extra is its price above the standard perfume (main-offer.liquid).
+  const STANDARD_PRICE = { 110: 15, 50: 11 };
+  function gradeInfo(p) {
+    const r = { n110: null, n50: null, g110: null, g50: null, compare: null };
+    for (const v of p.variants) {
+      const big = /110/.test(v.title), top = v.title.includes('نخب أول'), price = Number(v.price);
+      r[(top ? 'g' : 'n') + (big ? 110 : 50)] = price;
+      if (v.compareAt) r.compare = Math.max(r.compare || 0, Number(v.compareAt));
+    }
+    const onlyTop = p.tags.includes('نخب-أول-فقط');
+    const extra = size => (onlyTop ? (r['n' + size] ?? r['g' + size]) - STANDARD_PRICE[size]
+      : r['g' + size] != null && r['n' + size] != null ? r['g' + size] - r['n' + size] : null);
+    return { ...r, price110: r.n110 ?? r.g110, price50: r.n50 ?? r.g50,
+      grades: onlyTop ? 'top' : r.g110 != null || r.g50 != null ? 'both' : 'normal', up110: extra(110), up50: extra(50) };
+  }
+  const GRADE_LABELS = { normal: 'عادي فقط', top: 'نخب فقط', both: 'إصداران' };
+  const price = n => (n == null ? '—' : +n.toFixed(2));
+
   function renderList() {
     const all = active();
     const stats = [
-      ['all', 'كل العطور', all.length], ['shown', 'تظهر بالعروض', all.filter(visibleInOffers).length],
-      ['out', 'غير متوفرة', all.filter(p => !inStock(p)).length], ['hidden', 'مخفية يدوياً', all.filter(hidden).length],
-      ['noprio', 'بدون أولوية', all.filter(p => p.priority == null).length]
+      ['all', 'إجمالي العطور', all.length], ['in', 'المتوفر في المخزون', all.filter(inStock).length],
+      ['top', 'خيارات نخب أول', all.filter(p => gradeInfo(p).grades !== 'normal').length], ['hidden', 'مخفية (عروض)', all.filter(hidden).length],
+      ['out', 'نفذ', all.filter(p => !inStock(p)).length], ['noprio', 'بدون أولوية', all.filter(p => p.priority == null).length]
     ];
     const list = filtered();
     const rankMap = new Map(all.filter(visibleInOffers).sort(byPriority).map((p, i) => [p.id, i + 1]));
@@ -681,7 +742,7 @@
       <div class="stats">${stats.map(([k, l, n]) => `<button class="stat" data-filter="${k}" aria-pressed="${S.filter === k}"><span class="muted small">${l}</span><b>${n}</b></button>`).join('')}</div>
       <div class="card">
         <div class="toolbar">
-          <input class="input grow" type="search" placeholder="ابحث بالاسم العربي أو الإنجليزي…" value="${esc(S.q)}" data-q>
+          <input class="input grow" type="search" placeholder="ابحث باسم العطر العربي أو الإنجليزي أو المعرف (slug)…" value="${esc(S.q)}" data-q>
           <select class="input" style="width:auto" data-cat>
             <option value="">كل التصنيفات</option>
             ${categories().map(c => `<option value="${c.id}" ${S.cat === c.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}
@@ -704,33 +765,41 @@
           <button class="btn btn--sm btn--danger" data-bulk="archive">حذف (أرشفة)</button>
           <button class="btn btn--sm" data-bulk="clear">إلغاء التحديد</button>
         </div>
-        <div class="row row--head">
-          <span><input type="checkbox" data-selall ${list.length && list.every(p => S.selected.has(p.id)) ? 'checked' : ''} aria-label="تحديد الكل"></span>
-          <span>الترتيب</span><span></span><span>العطر</span><span>الأولوية</span><span>التصنيفات</span><span>الحالة</span><span></span>
+        <div class="ptable">
+          <div class="prow prow--head">
+            <span><input type="checkbox" data-selall ${list.length && list.every(p => S.selected.has(p.id)) ? 'checked' : ''} aria-label="تحديد الكل"></span>
+            <span>الأولوية<small>الأكبر = الأعلى</small></span><span>الصورة</span><span>العطر والشارة</span><span>110مل</span><span>50مل</span><span>قبل الخصم</span>
+            <span>خيارات النخب</span><span>زيادة 110مل</span><span>زيادة 50مل</span><span>المخزون</span><span>الظهور</span><span></span>
+          </div>
+          ${list.length ? list.map(p => rowHtml(p, rankMap.get(p.id))).join('') : '<div class="empty">لا توجد عطور مطابقة</div>'}
         </div>
-        ${list.length ? list.map(p => rowHtml(p, rankMap.get(p.id))).join('') : '<div class="empty">لا توجد عطور مطابقة</div>'}
       </div>`;
   }
 
   function rowHtml(p, rank) {
-    const cats = categories().filter(c => p.collections.includes(c.id) && c.handle !== SOURCE_HANDLE);
-    const shown = visibleInOffers(p);
-    return `<div class="row ${shown ? '' : 'is-off'}" data-id="${p.id}">
+    const shown = visibleInOffers(p), g = gradeInfo(p);
+    const up = n => (n > 0 ? `<span class="pup">${price(n)}</span>` : '<span class="muted">—</span>');
+    const visibility = p.status === 'DRAFT' ? '<span class="pvis is-draft">مسودة</span>'
+      : hidden(p) ? '<span class="pvis is-hidden">مخفي من العروض</span>' : '<span class="pvis">ظاهر في الكل</span>';
+    return `<div class="prow ${shown ? '' : 'is-off'}" data-id="${p.id}">
       <span class="c-sel"><input type="checkbox" data-sel ${S.selected.has(p.id) ? 'checked' : ''} aria-label="تحديد"></span>
-      <span class="c-rank rank" title="مكانه في قائمة الزبون">${rank ? '#' + rank : '–'}</span>
-      <span class="c-thumb">${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="" loading="lazy">` : '<span class="thumb"></span>'}</span>
-      <span class="c-name name"><b>${esc(p.title)}</b><span class="muted small">${esc(p.english)}</span></span>
-      <span class="c-prio prio">
+      <span class="c-prio prio" title="${rank ? `مكانه في قائمة الزبون: #${rank}` : 'ما بظهر بالعروض'}">
         <button class="icon-btn" data-move="up" title="قبل العطر الذي فوقه" aria-label="للأعلى">▲</button>
         <input class="input" type="number" inputmode="numeric" value="${p.priority ?? ''}" placeholder="—" data-prio aria-label="الأولوية">
         <button class="icon-btn" data-move="down" title="بعد العطر الذي تحته" aria-label="للأسفل">▼</button>
       </span>
-      <span class="c-cats chips">${cats.map(c => `<span class="chip">${esc(c.title)}</span>`).join('') || '<span class="muted small">—</span>'}</span>
-      <span class="c-stock stock-cell">${statusBadges(p)}</span>
-      <span class="c-act actions">
-        <label class="switch" title="${inStock(p) ? 'متوفر — اضغط ليصير غير متوفر' : 'غير متوفر — اضغط ليرجع متوفر'}"><input type="checkbox" data-toggle-stock ${inStock(p) ? 'checked' : ''}><span></span></label>
-        <button class="btn btn--sm" data-edit>تعديل</button>
-      </span>
+      <span class="c-thumb">${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="" loading="lazy">` : '<span class="thumb"></span>'}</span>
+      <span class="c-name name"><b>${esc(p.title)}</b><span class="small">${esc(p.english)}</span><span class="pslug">${esc(p.handle)}</span></span>
+      <span class="c-p110 pnum" data-label="110مل">${price(g.price110)}</span>
+      <span class="c-p50 pnum" data-label="50مل">${price(g.price50)}</span>
+      <span class="c-cmp pnum pnum--old" data-label="قبل الخصم">${price(g.compare)}</span>
+      <span class="c-grade"><span class="pgrade is-${g.grades}">${GRADE_LABELS[g.grades]}</span></span>
+      <span class="c-u110" data-label="زيادة 110">${up(g.up110)}</span>
+      <span class="c-u50" data-label="زيادة 50">${up(g.up50)}</span>
+      <span class="c-stock"><label class="pstock ${inStock(p) ? '' : 'is-out'}" title="${inStock(p) ? 'متوفر — اضغط ليصير نفذ' : 'نفذ — اضغط ليرجع متوفر'}">
+        <input type="checkbox" data-toggle-stock ${inStock(p) ? 'checked' : ''}>● ${inStock(p) ? 'متوفر' : 'نفذ'}</label></span>
+      <span class="c-vis">${visibility}</span>
+      <span class="c-act"><button class="btn btn--sm" data-edit>تعديل</button></span>
     </div>`;
   }
 
@@ -1197,6 +1266,7 @@
             <div class="is-total"><span>المجموع الإجمالي الكلي:</span><b>${plainJod(o.total)}</b></div></div>
         </section>
       </div>
+      ${shipBox(o, copy)}
     </div>`;
   }
 
@@ -1207,6 +1277,106 @@
       document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
     }
     toast('انتسخ ✓');
+  }
+
+  /* ---------------- Delivery company (Direct Delivery) ---------------- */
+  // Shipments go through the orders worker, which holds the company login; the barcode comes back as an
+  // order tag. Areas are Direct Delivery's own list: [governorate, [[area, cityId, villageId], …]].
+  const DELIVERY_AREAS = [["عمان",[["ابو علندا",1136,6195],["ابو عليا",1145,6222],["ابو نصير",1151,6250],["اسكان الكهربا",1136,6196],["اسكان ماركا",1128,6164],["اطراف عمان",41280,105724],["الارسال",1125,6154],["الاستقلال",1146,6225],["الاشرفية",1163,6279],["الامير راشد",1143,18012],["البكالوريا",1158,6270],["البلد",1164,6649],["البنيات",1133,6301],["البيادر",1127,6306],["التخصصي",1149,6245],["التطوير الحضري",1128,6165],["الثامن",1127,6161],["الجاردنز",1162,6278],["الجامعة الاردنية",1153,6254],["الجبل الاخضر",1130,6177],["الجبيهة",1153,6253],["الجسور العشرة",1170,6294],["الجندويل",1127,6160],["الجويدة",1166,6283],["الجيزة",41280,103329],["الجيزة",1181,107734],["الحج حسن",1134,6187],["الحدادة",1161,6276],["الحزام",1137,6200],["الحمر",41280,108012],["الحويان",1131,6182],["الخامس",1154,6683],["الخشافية",1135,6193],["الداخلية",1156,6265],["الدوار الاول",1148,6236],["الدوار الثالث",1148,6238],["الدوار الثامن",1148,103147],["الدوار الثاني",1148,6237],["الدوار الخامس",1148,103146],["الدوار الرابع",1148,6239],["الدوار السابع",1148,103145],["الدوار السادس",1148,103144],["الديوان الملكي",1146,6230],["الذراع الغربي",1130,6178],["الذهيبة",41280,111160],["الذهيبة",1135,6191],["الرابع",1154,21928],["الرابية",1157,6647],["الرجيب",1138,70855],["الروضة",1152,6252],["الرينبو",1148,6235],["الزهور",1134,6186],["السابع",1143,6212],["الشمالي",1146,539666],["الشميساني",1159,6271],["الصويفية",1220,6648],["الطيبة",1166,6780],["الظهير",1126,438694],["الظهير",1126,6155],["العالوك",1150,21654],["العبدلات",1128,6168],["العبدلي",1156,6264],["العبدلية",1135,6194],["العلكومية",1166,6284],["القسطل",1144,6215],["القسطل",41280,103322],["القصور",1147,6240],["القنية",1150,21657],["القويسمة",1138,534118],["القويسمة",1138,6488],["الكرسي",1127,6158],["الكمالية",1125,6153],["الكمشة",1150,21655],["الكوم",1150,6248],["اللبن",1167,21699],["اللبن",1135,6192],["اللويبدة",1155,6263],["المحطة",1146,6486],["المدينة الرياضية",1149,6244],["المدينة الطبية",1158,6781],["المرقب",1137,6707],["المريخ",1169,6291],["المزارع",1128,6167],["المستندة",1138,70854],["المستندة",1136,6197],["المشتى",1144,32341],["المصدار",1169,6292],["المطار",1144,6214],["المغيرات",1137,21927],["المقابلين",1131,6302],["المنارة",1170,6293],["المنصور",1153,853857],["الموقر",41280,103327],["النبعة",1150,6249],["النخيل",314835,439253],["النزهة",1147,6232],["النظيف",1169,6290],["الهاشمي",1146,6224],["الهاشمي الجنوبي",1146,6231],["الوحدات",1169,6289],["الونانات",1128,6166],["اليادودة",1167,6285],["الياسمين",1132,6184],["ام اذينة",1160,6272],["ام الحيران",1134,6188],["ام السماق",1142,6210],["ام نوارة",1165,6282],["بدر الجديدة",41280,103326],["بيرين",1150,21653],["تاج مول",1154,6262],["تلاع العلي",1141,6208],["تنسيق",409459,539665],["جامعة الاسراء",1144,6217],["جامعة الاسراء",1144,439317],["جامعة البتراء",1133,6185],["جامعة الزيتونة",1144,6218],["جاوا",1171,6296],["جبل التاج",1168,6286],["جبل الجوفة",1168,6287],["جبل الحديد",1138,6489],["جبل الحسين",1161,6274],["جبل القلعة",1161,23766],["جبل النصر",1139,6202],["جبل عمان",1148,6233],["حسبان",41280,103321],["حي الامام الغزالي",1153,62583],["حي الديار",1154,6261],["حي الصحابة",1132,24284],["حي ام تينة",1168,6288],["حي نزال",1130,29854],["خريبة السوق",1172,6297],["خلدا",1142,6209],["دابوق",1158,6269],["دوار الجمرك",1131,6181],["دوار الدبابة",1145,6223],["دوار السكر",1142,6211],["دوار الشرق الاوسط",1134,6300],["دوار فراس",1161,6275],["دير غبار",1154,6260],["راس العين",1130,6176],["رجم الشامي-سحاب",41280,114341],["زيزيا",41280,103328],["زيزيا",1144,6216],["سحاب",1135,6189],["شارع الاذاعة",1131,6179],["شارع الجامعة",315701,440178],["شارع الحرية",1131,6180],["شارع المدينة",1157,6268],["شارع مكة",1157,6267],["شفا بدران",1150,6247],["صروت",1150,21656],["صويلح",1125,6310],["ضاحية الاقصى",1146,6227],["ضاحية الامير حسن",1146,6226],["ضاحية الامير حسن",1147,6701],["ضاحية الامير سلمى",1146,6229],["ضاحية الامير علي",1172,6298],["ضاحية الرشيد",1152,6251],["ضاحية النخيل",314835,534313],["طبربور",1145,6221],["طلوع البلدية",1153,6256],["طلوع نيفين",1153,6257],["عبدالله غوشة",1143,6213],["عبدون",1154,6259],["عراق الامير",41280,107733],["عرجان",1149,6243],["كلية حطين",1131,6183],["ماحص",41280,103841],["ماركا الجنوبية",1137,6198],["ماركا الشمالية",1128,6305],["مخيم الحسين",1161,6277],["مرج الحمام",1126,6309],["مستشفى الاسراء",1153,6258],["مستشفى الاسلامي",1156,6266],["مستشفى الامير حمزة",1146,6228],["مستشفى البشير",1163,6280],["مطار الملكة علياء",41280,103323],["نادي الرماية الملكي",1166,6779],["نادي السباق",1137,6199],["ناعور",41282,103334],["نزال",1130,6303],["وادي الرمم",1170,6295],["وادي السير",1127,6159],["وادي صقرة",1148,6234],["وادي طي",1172,6299],["وسط البلد",1164,32047]]],["إربد",[["ابو سيدو",8354,23583],["ابو هابيل",8354,23584],["اربد",1184,6455],["الاغوار الشمالية",8354,23603],["الحصن",1184,6464],["الحي الشرقي",1184,6465],["الرمثا",1189,6518],["الريان",1184,6482],["الريحانة",8354,23592],["الشجرة",1184,6484],["الشونة الشمالية",8354,23596],["الصريح",1184,6481],["الطيبة",1174,108021],["العدسية الشمالية",8354,23595],["القرن",8354,23585],["القيروان",1184,6476],["الكرامة",6813,23580],["الكريمة",8354,23582],["الكورة",1184,6463],["المدارج",8354,23597],["المزار الشمالي",1184,6470],["المشارع",8354,23588],["المنشية",8354,23594],["ايدون",1184,6467],["بصيلة",8354,23600],["بليلة",1184,6480],["بني عبيد",1184,6483],["بني كنانة",1184,6477],["بيت راس",1184,6479],["بيت يافا",1184,6478],["تل الاربعين",8354,23591],["جامعة اليرموك",1184,24448],["جسر الشيخ حسين",8354,23598],["حكما",1184,6466],["دير ابي سعيد",1184,6475],["رحابا",1184,6469],["زبدة",1184,6472],["زمالية",8354,23601],["سال",1184,6474],["سحم",1184,6471],["سليخات",8354,23589],["طبقة فحل",8354,23599],["ظهرة الرملة",6813,23577],["قليعات",8354,23590],["كفر ابيل",1184,6460],["كفر اسد",1184,6458],["كفر راكب",1184,6461],["كفر عوان",1184,6457],["كفر يوبا",1184,6459],["كفرسوم",1184,6462],["ملكا",1184,6468],["نعيمة",1184,6473],["وادي الريان",8354,23587],["وادي اليابس",8354,23586],["وقاص",8354,23593]]],["الزرقاء",[["أبو صياح",392,2545],["الازرق",40384,99774],["الامير فيصل",1188,6517],["الاوتوستراد",1176,6368],["البتراوي",1176,6366],["الجبل الابيض",1176,6351],["الجبل الشمالي",1188,6516],["الجديدة",1176,6344],["الحاووز",1176,6367],["الحلابات",1176,6346],["الرصيفة",1188,6507],["الزواهرة",1176,6354],["السخنة",392,2579],["الضليل",392,2558],["الغباوي",1176,16160],["الغويرية",1176,6359],["القادسية",1188,6515],["المجمع الجديد",1176,6370],["المجمع القديم",1176,6369],["المشيرفة",1188,6514],["المنطقة الحرة",392,2592],["الهاشمية الزقاء",392,2596],["الوسط التجاري",1176,6364],["جبل رحمة",1176,6363],["جبل طارق",1176,6358],["جسر البيبسي",1188,6511],["حطين",1188,6510],["حي الجندي",1176,6353],["حي النزهة",1176,6355],["حي رمزي",1176,6356],["شنلر",1188,6512],["شومر",1176,6361],["ضاحية الاميرة سلمى",1176,6350],["ضاحية الاميرة هيا",1176,6347],["ضاحية المدينة",1176,6348],["ضاحية مكة",1176,6349],["عوجان",1188,6646],["قصر الحلابات الشرقي",392,2554],["قصر الحلابات الغربي",392,2555],["مدينة الشرق",1176,6362],["مركز الزرقاء",392,579614],["مركز الزرقاء",1176,6343],["معصوم",1176,6352],["وادي الحجر",1176,6357],["وادي القمر",1188,6509],["ياجوز",1188,6690]]],["المفرق",[["إم المسايل",394,2828],["ارحاب",394,2793],["ال البيت",1179,24281],["الأزرق الجنوبي",394,2832],["الأزرق الشمالي",394,2825],["الاثنى",394,2734],["الازرق",1179,6698],["الاشرفية المفرق",394,2715],["الاكيدر",1179,38167],["البادية الشمالية",1179,6395],["الباعج",394,2756],["البستانه",394,2723],["البشرية",394,2716],["البوادي",394,2740],["البويضة الغربية",394,2788],["الحرش",394,2811],["الحرفوشية",394,2799],["الحصينيات المفرق",394,2819],["الحمرا",1179,32342],["الحمراء المفرق",394,2809],["الحميدية المفرق",394,2714],["الخالدية",1179,6691],["الخالدية المفرق",394,2824],["الخناصري",394,2814],["الخناصري",1179,32346],["الدجنية",394,2792],["الدجنية",1179,32344],["الدرزية",394,2818],["الدغلية",394,2827],["الدفيانة",1179,6418],["الدقمسه",394,2782],["الدندنية",394,2817],["الرابية",394,2746],["الرشاده",394,2770],["الرفاعيات",1179,32354],["الرقبان",394,2735],["الروضة المفرق",394,2737],["الرويشد",394,2739],["الرويشد",1179,6399],["الريشة الشرقية",394,2732],["الريشة الغربية",394,2736],["الزبيدية",394,2752],["الزعتري",394,2757],["الزعتري",1179,6393],["السحري",394,2773],["السعادة",394,2722],["السعيدية",1179,32352],["السهل",394,2822],["السويلمه",394,2815],["الصالحية المفرق",394,2713],["الصفاوي",1179,6400],["الصهاه",394,2784],["الغدير",1179,6408],["الفحيليه",394,2745],["الفيضة",394,2733],["القيصومه",394,2724],["الكرامة المفرق",394,2731],["المبروكة",394,2823],["المدور المفرق",394,2783],["المزارع",394,2829],["المزه",394,2764],["المشاقيق",394,2729],["المشرفه",394,2821],["المشيرفه المفرق",394,2816],["المطلة المفرق",394,2806],["المعمرية",394,2790],["المفردات",394,2749],["المكيفتة",1179,6419],["المناره",394,2718],["المنصورة المفرق",394,2754],["المنيفه",394,2776],["الناصرية (بني خالد)",394,2741],["النهضة",394,2751],["الهاشمية الشرقية",394,2725],["ام الجمال",1179,32347],["ام السرب",394,2755],["ام القطين",1179,6396],["ام النعام",1179,6412],["ام النعام الشرقية",394,2763],["ام النعام الغربية",394,2760],["ام بطيمة",1179,38168],["ام بطيمه",394,2780],["ام حصماصه",394,2768],["ام رمانة المفرق",394,2772],["باعج",1179,6392],["بريقا",394,2812],["بريقا",1179,32343],["بلدة بني هاشم",394,2717],["بلعما",394,2794],["بلعما",1179,6409],["بويضة الحوامدة",394,2767],["بويضة العليمات",394,2789],["ثغرة الجب",394,2753],["جابر (مركز الحدود)",394,2798],["جابر السرحان",394,2802],["جابر السرحان",1179,32349],["حمامة العليمات",394,2787],["حمامة العموش",394,2781],["حميد",394,2778],["حوشا",394,2808],["حويجه",394,2748],["حيان المشرف",394,2765],["دحل",394,2785],["دير الكهف",1179,32353],["دير ورق",394,2795],["رباع السرحان",394,2801],["رجم سبع الشمالي",394,2758],["رجم سبع الشمالي",394,2759],["رحبة ركاد",394,2719],["روضة ابو الهيال",394,2743],["روضة الامير حمزة",394,2720],["روضة الاميرة بسمة",1179,32348],["روضة الرويشد",394,2730],["روضة الرويعي",394,2747],["زملة الامير غازي",394,2721],["زملة الطرقي",394,2807],["سما السرحان",394,2805],["سما السرحان",1179,6402],["سميا السرحان",394,2804],["شارع جرش",1179,6413],["شويكة",1179,6410],["صبحا وصبحية",1179,32345],["صعد",394,2775],["عالية الشويعر",394,2727],["عمرة وعميرة",394,2728],["عمرة وعميرة",1179,6405],["عين البيضا",394,2830],["فاع",394,2810],["فاع",1179,6417],["لصفاوي",394,2712],["مبروكة",1179,6414],["مداوير عين",394,2771],["مركز المفرق",1179,103124],["مركز المفرق",394,583051],["مغير السرحان",394,2800],["مغير السرحان",1179,6403],["منشية الخليفة",394,2726],["منشية السلطه",394,2750],["منشية الغياث",394,2738],["منشية الكعيبر",394,2803],["منشية بني حسن",1179,103051],["نادره",394,2786],["هويشان",394,2791]]],["البلقاء",[["أم الدنانير",389,2358],["أم انجاصة",389,2359],["أم جوزة",389,2320],["ابو عبيدة",6813,23578],["الاغوار الوسطى",6813,31886],["البحر الميت",6813,23581],["البحيرة",1180,40227],["البقعة",41280,103325],["البقيع",1180,40228],["الحمر",1180,6681],["الدبابنة",1180,6429],["الديره الغربية",389,2313],["السرو",1180,21921],["السلالم",389,2329],["السلط",1180,6421],["السليحي",389,2355],["الشونة الجنوبية",6813,23576],["الشويحي الغربي",389,2354],["الصافح",1180,40230],["الصبيحي",389,2331],["الصيوانية",1180,40232],["العارضة",389,2305],["العارضة البلقاء",389,2337],["العيزرية البلقاء",389,2328],["الفحيص",41280,103840],["المضمار",389,2353],["المغاريب",1180,40229],["الميدان",1180,40231],["اليزيدية",1180,40234],["جامعة البلقاء التطبيقية",1180,40226],["جسر داميا",6813,23579],["جلعد",1180,6431],["دير علا",389,2349],["دير علا",6813,23575],["زي",389,2306],["زي",1180,6426],["سلحوب",389,2360],["سوميا، الرميمين",389,2318],["شارع 60",1180,40233],["صبيحي",1180,6424],["علان",1180,6430],["عمان الاهلية",1180,6425],["عيرا",1180,6427],["عيرا ويرقا",389,2304],["عين الباشا",41280,103324],["عين الباشا",41280,438695],["قرية أبو نصير",389,2361],["مركز البلقاء",389,537020],["موبص",389,2357],["وادي الريح",1180,40236],["وادي السلط",1180,40235],["يرقا",1180,62582],["يرقا",1180,6428]]],["الكرك",[["ادر",1175,6335],["الابيض",8353,23568],["الابيض",8735,24765],["الاغوار الجنوبية",8355,40130],["الثنية",1175,6338],["الحديثة",8355,23570],["الحسا",8353,23563],["الحسا",8735,24764],["الدامخي",8735,24763],["الدامخي",8353,23564],["الربة",1175,6341],["السلطاني",8353,23567],["السلطاني",8735,24762],["السواقة",8353,23565],["السواقة",8735,24761],["الغور الصافي",8355,23571],["القطرانة",8353,23566],["القطرانة",1175,6342],["المرج",1175,6339],["المزار الجنوبي",1175,6487],["المعمورة",8355,23574],["جرف الدراويش",8735,24760],["جرف الدراويش",8353,23569],["ضبعة",8353,439241],["عي",1175,6340],["غور المزرعة",8355,23572],["غور فيفا",8355,23573],["مؤتة",1175,6337],["مركز الكرك",1175,6336]]],["معان",[["اذرح",1174,6332],["البتراء",1174,6329],["الجفر",1174,6331],["الحسينية",1174,6334],["السطح",1174,6333],["الشوبك",1174,6330],["مركز معان",1174,6327],["وادي موسى",1174,6328]]],["الطفيلة",[["الاغوار الجنوبية",387,6524],["الحسا",387,6638],["العيص",387,6520],["غور الصافي",387,6521],["غور المزرعة",387,6522],["مركز الطفيلة",387,32080],["مركز الطفيلة",387,6636]]],["العقبة",[["الديسة",1173,6316],["الطويسة",1173,33514],["القريقرة",1173,33515],["القويرة",1173,6317],["المحدود",1173,6318],["المحدودة",388,6038],["المريغة",1173,6319],["مركز العقبة",1173,6314],["وادي رم",1173,6313],["وادي عربة",40385,99775],["وادي عربة",1173,6315]]],["جرش",[["المصطبة",1177,6377],["بورما",1177,6380],["تل الرمان",1177,6376],["ريمون",1177,6379],["ساكب",1177,6375],["سوف",1177,6374],["كتة",1177,6378],["مخيم غزة",1177,6381],["مركز جرش",1177,6383]]],["عجلون",[["باعون",1178,6384],["بيرين",1178,114994],["راس منيف",1178,6390],["صخرة",1178,6386],["عبين",1178,6389],["عنجرة",1178,6387],["عين جنة",1178,6385],["مركز عجلون",1178,6382]]],["مادبا",[["الاندلسية",1181,6443],["الجامعة الالمانية",1181,6442],["الفيصلية",1181,6438],["اللب",1181,6436],["ام الرصاص",1181,6433],["ام العمد",1181,6439],["حنينا",1181,6437],["ذيبان",1181,6434],["ماعين",1181,6441],["مركز مادبا",1181,6432],["مليح",1181,6435]]]];
+  const SHIP_TAG = 'شحنة-';
+  const SHIP_STATUS = {
+    PENDING_CUSTOMER_CARE_APPROVAL: 'تم الإرسال', APPROVED_BY_CUSTOMER_CARE_AND_WAITING_FOR_DISPATCHER: 'جاهز للتوزيع', CANCELLED: 'ملغية',
+    ASSIGNED_TO_DRIVER_AND_PENDING_APPROVAL: 'مع السائق (بانتظار الموافقة)', REJECTED_BY_DRIVER_AND_PENDING_MANGEMENT: 'رفضها السائق',
+    ACCEPTED_BY_DRIVER_AND_PENDING_PICKUP: 'بانتظار الاستلام من المحل', SCANNED_BY_DRIVER_AND_IN_CAR: 'استلمها السائق', MOVED_TO_SHELF_AND_OUT_OF_HANDLER_CUSTODY: 'بالمستودع',
+    OPENED_ISSUE_AND_WAITING_FOR_MANAGEMENT: 'في مشكلة (عند الإدارة)', DELIVERED_TO_RECIPIENT: 'تم التسليم ✅', POSTPONED_DELIVERY: 'تأجيل التسليم',
+    RETURNED_BY_RECIPIENT: 'رجعها الزبون', COMPLETED: 'مكتملة', TRANSFERRED_OUT: 'محولة', PARTIALLY_DELIVERED: 'تسليم جزئي', DELIVERED_TO_SENDER: 'رجعت للمحل'
+  };
+  const shipBarcode = o => o.tags.find(t => t.startsWith(SHIP_TAG))?.slice(SHIP_TAG.length) || '';
+  const normAr = s => String(s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ّ/g, '').trim();
+  // A first guess from what the customer typed: the governorate named in the city field (Shopify's city is
+  // usually it), then the longest area name found in the city and address, looking inside that governorate only.
+  function guessArea(o) {
+    const text = normAr(`${o.city} ${o.address}`), city = normAr(o.city);
+    const gov = DELIVERY_AREAS.find(([g]) => city.includes(normAr(g).replace(/^ال/, '').replace(/ء$/, '')))?.[0];
+    let best = null;
+    for (const [g, areas] of DELIVERY_AREAS) {
+      if (gov && g !== gov) continue;
+      for (const [name, , village] of areas) {
+        const n = normAr(name);
+        if (n.length > 2 && text.includes(n) && (!best || n.length > best.len)) best = { gov: g, area: village, len: n.length };
+      }
+    }
+    return best || { gov: gov || '', area: '' };
+  }
+  const shipPick = o => (S.ship[o.id] ||= guessArea(o));
+  const pickedArea = o => { const p = shipPick(o); return DELIVERY_AREAS.find(([g]) => g === p.gov)?.[1].find(a => a[2] === Number(p.area)); };
+
+  function shipBox(o, copy) {
+    const barcode = shipBarcode(o), head = '<div class="odet__h"><span>🚚 شركة التوصيل (Direct Delivery)</span></div>';
+    if (barcode) {
+      const st = S.shipStatus[o.id];
+      return `<section class="odet__box odet__ship">${head}
+        <div class="odet__field"><div><small>رقم الشحنة</small><b dir="ltr">${esc(barcode)}</b></div>${copy(barcode)}</div>
+        <div class="small">الحالة: <b>${st ? esc(SHIP_STATUS[st] || st) : 'اكبس «تحديث الحالة»'}</b></div>
+        <div class="actions"><button class="btn btn--sm" data-ship="status">🔄 تحديث الحالة</button><button class="btn btn--sm" data-ship="awb">🖨️ البوليصة</button>
+          <button class="btn btn--sm btn--danger" data-ship="cancel">إلغاء الشحنة</button></div></section>`;
+    }
+    const pick = shipPick(o), areas = DELIVERY_AREAS.find(([g]) => g === pick.gov)?.[1] || [];
+    return `<section class="odet__box odet__ship">${head}
+      <div class="muted small">هذا الطلب لسا مش مرفوع على شركة التوصيل. تأكد من المنطقة وارفعه.</div>
+      <div class="odet__shipform">
+        <label>المحافظة<select class="input" data-ship-gov><option value="">اختر…</option>
+          ${DELIVERY_AREAS.map(([g]) => `<option ${g === pick.gov ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>
+        <label>المنطقة<select class="input" data-ship-area ${areas.length ? '' : 'disabled'}><option value="">اختر المنطقة…</option>
+          ${areas.map(([n, , v]) => `<option value="${v}" ${v === Number(pick.area) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+        <label>المبلغ المطلوب تحصيله (د.أ)<input class="input" type="number" step="0.5" value="${+o.total.toFixed(2)}" data-ship-cod></label>
+        <label>ملاحظات للسائق (اختياري)<input class="input" data-ship-notes value="${esc(o.note)}"></label>
+      </div>
+      <button class="btn btn--primary" data-ship="create">🚚 رفع الطلب لشركة التوصيل</button></section>`;
+  }
+
+  async function shipAction(o, act, box) {
+    const st = S.orderSettings;
+    const call = async (path, method = 'GET', body) => {
+      if (DEMO) return { ok: true, barcode: 'DEMO' + Date.now().toString().slice(-6), status: 'PENDING_CUSTOMER_CARE_APPROVAL', url: 'about:blank' };
+      if (!st.worker_url || !st.worker_key) throw new Error('رابط السيرفر مش مضبوط بالإعدادات');
+      const r = await fetch(`${st.worker_url}/delivery/${path}`, { method, headers: { 'X-Asfour-Key': st.worker_key, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        body: body && JSON.stringify(body) });
+      const j = await r.json().catch(() => ({ ok: false, error: 'رد غير مفهوم من السيرفر' }));
+      if (!j.ok) throw new Error(j.error);
+      return j;
+    };
+    const barcode = shipBarcode(o), q = `barcode=${encodeURIComponent(barcode)}&order=${encodeURIComponent(o.id.split('/').pop())}`;
+    if (act === 'create') {
+      const area = pickedArea(o), gov = shipPick(o).gov;
+      if (!area) return toast('اختار المحافظة والمنطقة أول', true);
+      if (!o.phone) return toast('ما في رقم هاتف على الطلب، شركة التوصيل بتحتاجه', true);
+      const cod = Number(box.querySelector('[data-ship-cod]').value), notes = box.querySelector('[data-ship-notes]').value.trim();
+      if (!await confirmBox(`رفع الطلب ${o.name} لشركة التوصيل؟\n${o.customer} · ${gov} / ${area[0]} · تحصيل ${cod} د.أ`)) return;
+      return run('انرفع الطلب لشركة التوصيل ✓', async () => {
+        const r = await call('ship', 'POST', { orderId: o.id.split('/').pop(), invoice: o.name.replace('#', ''), name: o.customer, phone: sheetRow(o).phone,
+          phone2: o.altPhone, cod, notes, description: orderTexts(o).sheet, address: [gov, area[0], o.address].filter(Boolean).join(' / '), cityId: area[1], villageId: area[2] });
+        const tag = SHIP_TAG + r.barcode;
+        await api.addTags(o, [tag]); o.tags.push(tag);
+        S.shipStatus[o.id] = 'PENDING_CUSTOMER_CARE_APPROVAL';
+      });
+    }
+    if (act === 'status') return run('', async () => { S.shipStatus[o.id] = (await call(`status?${q}`)).status; });
+    if (act === 'awb') {
+      // Opened now, inside the click, so the browser doesn't block it; the PDF link arrives after.
+      const win = window.open('', '_blank');
+      try { const r = await call(`awb?${q}`); if (win) win.location = r.url; else window.open(r.url, '_blank'); }
+      catch (e) { win?.close(); toast('حصل خطأ: ' + e.message, true); }
+      return;
+    }
+    if (act === 'cancel') {
+      if (!await confirmBox(`إلغاء الشحنة ${barcode} عند شركة التوصيل؟`)) return;
+      return run('انلغت الشحنة', async () => {
+        await call(`cancel?${q}`, 'POST', {});
+        const tag = SHIP_TAG + barcode;
+        await api.removeTags(o, [tag]); o.tags = o.tags.filter(t => t !== tag); delete S.shipStatus[o.id];
+      });
+    }
   }
 
   async function orderAction(o, act) {
@@ -1677,6 +1847,8 @@ function reply(o) {
   app.addEventListener('change', e => {
     const el = e.target, row = el.closest('[data-id]'), p = row && find(row.dataset.id);
     if (el.matches('[data-ostatus]')) return orderStatus(S.orders.find(o => o.id === el.closest('[data-order-id]').dataset.orderId), el.value);
+    if (el.matches('[data-ship-gov]')) { S.ship[el.closest('[data-order-id]').dataset.orderId] = { gov: el.value, area: '' }; return render(); }
+    if (el.matches('[data-ship-area]')) { S.ship[el.closest('[data-order-id]').dataset.orderId].area = el.value; return; }
     if (el.matches('[data-cat]')) { S.cat = el.value; return render(); }
     if (el.matches('[data-sort]')) { S.sort = el.value; return render(); }
     if (el.matches('[data-selall]')) { filtered().forEach(x => (el.checked ? S.selected.add(x.id) : S.selected.delete(x.id))); return render(); }
@@ -1695,6 +1867,10 @@ function reply(o) {
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
     if (el.matches('[data-copy]')) return copyText(el.dataset.copy);
+    if (el.dataset.ship) {
+      const box = el.closest('[data-order-id]');
+      return shipAction(S.orders.find(o => o.id === box.dataset.orderId), el.dataset.ship, box);
+    }
     if (el.matches('[data-otoggle]')) {
       const id = el.closest('[data-order-id]').dataset.orderId;
       S.openOrders.has(id) ? S.openOrders.delete(id) : S.openOrders.add(id);
