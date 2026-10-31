@@ -280,6 +280,65 @@
     .odet__sum div { display: flex; justify-content: space-between; }
     .odet__sum .is-total { font-size: 15px; font-weight: 800; color: var(--primary); }
     .odet__ship { border-color: #fbd5b5; background: #fffaf5; }
+    /* «السلال» tab */
+    .vis-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; margin-bottom: 14px; box-shadow: var(--shadow); }
+    .vis-stats > div { background: #fff; padding: 12px 14px; }
+    .vis-stats small { color: var(--muted); font-size: 12px; font-weight: 600; display: block; }
+    .vis-stats b { font-size: 22px; font-weight: 800; color: var(--primary); }
+    .vis-bar { padding: 12px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .vis-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .vis-chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+    .vis-chip[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .vis-search { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; }
+    .vis-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 14px; align-items: start; }
+    .vis-side { display: flex; flex-direction: column; gap: 10px; }
+    .vis-src { display: grid; grid-template-columns: repeat(6, 1fr); background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .vis-src > div { padding: 8px 6px; text-align: center; }
+    .vis-src > div + div { border-inline-start: 1px solid var(--line); }
+    .vis-src small { display: block; font-size: 11px; color: var(--muted); }
+    .vis-src b { font-size: 14px; color: var(--primary); }
+    .vis-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--gold-soft); border: 1px solid #f0dfb3; border-radius: 12px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .vis-list { display: flex; flex-direction: column; gap: 8px; max-height: 75vh; overflow: auto; padding: 2px; }
+    .vis-row { text-align: start; font: inherit; border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+    .vis-row:hover { border-color: #bcd6c6; }
+    .vis-row.is-sel { border-color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); background: #f6fbf8; }
+    .vis-row__top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .vis-row__top code { font-size: 11px; background: var(--gold-soft); border-radius: 6px; padding: 1px 6px; }
+    .vis-chip-sm { font-size: 11px; border: 1px solid #bfe3cc; color: #15803d; border-radius: 999px; padding: 0 7px; }
+    .vis-row__mid { display: flex; align-items: baseline; gap: 6px; }
+    .vis-row__val { margin-inline-start: auto; color: var(--primary); }
+    .vis-detail { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 10px; }
+    .vis-pick { text-align: center; padding: 60px 10px; font-size: 40px; color: var(--muted); }
+    .vis-pick p { font-size: 15px; font-weight: 700; color: var(--text); }
+    .vis-d__head { display: flex; align-items: center; gap: 10px; }
+    .vis-d__head > div { flex: 1; min-width: 0; }
+    .vis-d__head code { display: block; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+    .vis-back { display: none; }
+    .vis-d__box { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .vis-d__name { font-size: 18px; }
+    .vis-d__wa { background: #f1fbf5; border-color: #bfe3cc; }
+    .btn--wa { background: #25d366; color: #fff; border-color: #25d366; text-decoration: none; }
+    .btn--clarity { background: var(--gold-soft); border-color: #f0dfb3; color: #8a5a06; text-decoration: none; }
+    .vis-item { display: flex; justify-content: space-between; gap: 10px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 13px; }
+    .vis-timeline { list-style: none; margin: 0; padding: 0 14px 0 0; border-inline-start: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+    .vis-timeline li { position: relative; display: flex; flex-direction: column; font-size: 13px; }
+    .vis-timeline li::before { content: ''; position: absolute; inset-inline-start: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
+    .vis-timeline span { color: var(--muted); overflow-wrap: anywhere; }
+    .vis-timeline small { color: var(--muted); font-size: 11px; }
+    @media (max-width: 860px) {
+      .vis-stats { grid-template-columns: repeat(2, 1fr); }
+      .vis-stats > div:last-child { grid-column: 1 / -1; }
+      .vis-search { grid-template-columns: 1fr 1fr; }
+      .vis-search [data-vq] { grid-column: 1 / -1; }
+      .vis-src { grid-template-columns: repeat(3, 1fr); }
+      .vis-src > div:nth-child(4) { border-inline-start: 0; }
+      .vis-src > div:nth-child(n+4) { border-top: 1px solid var(--line); }
+      .vis-grid { grid-template-columns: 1fr; }
+      .vis-detail { display: none; position: static; }
+      .vis-detail.is-on { display: flex; }
+      .vis-grid:has(.vis-detail.is-on) .vis-side { display: none; }
+      .vis-back { display: inline-flex; }
+    }
     .btn--cancel { background: #fff; border-color: #f3c6c1; color: #a3271b; }
     .btn--ship { background: #fff4ea; border-color: #f6cfa8; color: #9a4b07; }
     .btn--ship.is-done { background: #ecfdf3; border-color: #b7ebc9; color: #15803d; font-family: ui-monospace, Consolas, monospace; }
@@ -305,6 +364,7 @@
     </div>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" data-tab="orders" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>الطلبات</button>
+      <button class="tab" role="tab" data-tab="visits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>السلال</button>
       <button class="tab" role="tab" data-tab="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="3.5" rx="1"/><path d="M10.5 5.5v3M13.5 5.5v3"/><rect x="5" y="8.5" width="14" height="13.5" rx="3.5"/></svg>العطور</button>
       <button class="tab" role="tab" data-tab="preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>معاينة ترتيب الزبون</button>
       <button class="tab" role="tab" data-tab="cats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1"/></svg>التصنيفات</button>
@@ -337,7 +397,8 @@
 
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
               priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
-              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null, openOrders: new Set(), ship: {}, shipStatus: {} };
+              orders: null, ordersLoading: false, orderFilter: 'new', orderSettings: null, shopId: null, openOrders: new Set(), ship: {}, shipStatus: {},
+              visits: { filter: 'incomplete', q: '', from: '', to: '', empty: false, list: null, stats: null, more: false, sel: null, detail: null, loading: false } };
 
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -681,9 +742,9 @@
   function render() {
     document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === S.tab));
     // The orders tab loads on its own; the perfume tabs wait for the catalogue (or its saved copy).
-    if (S.tab !== 'orders' && !S.productsReady) { app.innerHTML = '<div class="loading">جاري تحميل العطور…</div>'; return; }
+    if (S.tab !== 'orders' && S.tab !== 'visits' && !S.productsReady) { app.innerHTML = '<div class="loading">جاري تحميل العطور…</div>'; return; }
     if (S.productsReady) saveCache();
-    ({ orders: renderOrders, list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
+    ({ orders: renderOrders, visits: renderVisits, list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
   }
 
   function statusBadges(p) {
@@ -1288,6 +1349,194 @@
       document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
     }
     toast('انتسخ ✓');
+  }
+
+  /* ---------------- Store visits («السلال») ---------------- */
+  // Every visit to the store, reported by the theme's tracker (assets/track.js) to the orders worker: pages, cart,
+  // what was typed on the order page, and whether it became an order. Unfinished ones can be followed up here.
+  const CLARITY_PROJECT = 'y5raoznta8';
+  const DEVICES = { ios: 'آيفون (iOS)', android: 'أندرويد', desktop: 'كمبيوتر' };
+  const SOURCES = { instagram: 'إنستغرام', facebook: 'فيسبوك', google: 'جوجل', tiktok: 'تيك توك', direct: 'دخول مباشر' };
+  const VISIT_FILTERS = [['all', 'الكل'], ['incomplete', 'غير مكتملة'], ['active', 'نشطة الآن'], ['idle', 'خاملة'], ['completed', 'مكتملة'], ['followed', 'تمت المتابعة'], ['ignored', 'تم التجاهل']];
+  const EVENT_LABELS = { view: 'فتح صفحة', add: 'إضافة للسلة', cart: 'السلة', form: 'تعبئة بيانات الطلب', order: 'تم الطلب ✓', message: 'رسالة واتساب', status: 'تغيير الحالة' };
+  const VISIT_MESSAGE = 'أهلاً بك، معك متجر عطور عصفور 👑 لاحظنا إنك ما كمّلت طلبك، بنقدر نساعدك؟ إذا بتحب نأكدلك الطلب ابعتلنا «تمام» 🌹';
+
+  const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? 'الآن' : m < 60 ? `قبل ${m} د` : m < 1440 ? `قبل ${Math.round(m / 60)} س` : `قبل ${Math.round(m / 1440)} ي`; };
+  const span = (a, b) => { const s = Math.max(0, Math.round((b - a) / 1000)); return s < 60 ? `${s}ث` : `${Math.floor(s / 60)}د ${s % 60}ث`; };
+  const visitState = v => (v.stage === 'completed' ? ['مكتملة ✓', 'badge--ok'] : Date.now() - v.updated < 300000 ? ['نشطة الآن', 'badge--draft']
+    : v.cart_value > 0 ? ['غير مكتملة', 'badge--out'] : ['تصفح فقط', 'badge--hidden']);
+  const clarityUrl = id => `https://clarity.microsoft.com/projects/view/${CLARITY_PROJECT}/impressions?date=Last%2030%20days&Variables=sid%3A${encodeURIComponent(id)}`;
+
+  async function workerGet(path, opts = {}) {
+    if (!S.orderSettings) await api.loadOrders();
+    const st = S.orderSettings;
+    if (!st.worker_url || !st.worker_key) throw new Error('رابط السيرفر مش مضبوط بالإعدادات');
+    const r = await fetch(st.worker_url + path, { ...opts, headers: { 'X-Asfour-Key': st.worker_key, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) } });
+    const j = await r.json().catch(() => ({ ok: false, error: 'رد غير مفهوم' }));
+    if (!j.ok) throw new Error(j.error || 'خطأ');
+    return j;
+  }
+
+  function demoVisits() {
+    const now = Date.now(), m = 60000;
+    const v = (i, o) => ({ id: 'demo' + i + 'a8f3c2', created: now - o.age - (o.dur || 90000), updated: now - o.age, device: o.device, source: o.source, landing: o.landing || '/',
+      last_path: o.last || '/cart', views: o.views || 3, name: o.name || null, phone: o.phone || null, gov: o.gov || null, area: o.area || null,
+      cart_value: o.value || 0, cart_count: o.count || 0, stage: o.stage, order_name: o.order || null, status: o.status || '' });
+    const list = [
+      v(1, { age: 2 * m, device: 'android', source: 'instagram', stage: 'checkout', value: 32, count: 1, name: 'أحمد', phone: '0791234567', gov: 'عمان', area: 'خلدا', landing: '/products/offer-strong' }),
+      v(2, { age: 40 * m, device: 'ios', source: 'instagram', stage: 'checkout', value: 50, count: 1, name: 'سارة', phone: '0785551234', gov: 'إربد', landing: '/products/offer-royal' }),
+      v(3, { age: 3 * 60 * m, device: 'android', source: 'facebook', stage: 'cart', value: 20, count: 1, landing: '/products/offer-classic' }),
+      v(4, { age: 5 * 60 * m, device: 'ios', source: 'instagram', stage: 'completed', value: 32, count: 1, name: 'محمد', phone: '0778889990', order: '#1015' }),
+      v(5, { age: 20 * 60 * m, device: 'desktop', source: 'google', stage: 'checkout', value: 15, count: 1, status: 'followed', name: 'ليث', phone: '0799990000' })
+    ];
+    return { sessions: list, more: false, stats: { active: 1, idle: 1, incomplete: 4, pending: 3, value: 117, visits: 240, facebook: 30, instagram: 150, google: 12, ios: 90, android: 120, bounce: 25 } };
+  }
+
+  async function loadVisits(append = false) {
+    const V = S.visits;
+    if (V.loading) return;
+    V.loading = true;
+    try {
+      let j;
+      if (DEMO) j = demoVisits();
+      else {
+        const p = new URLSearchParams({ filter: V.filter, q: V.q, limit: '40', offset: append ? String(V.list?.length || 0) : '0' });
+        if (V.empty) p.set('empty', '1');
+        if (V.from) p.set('from', String(new Date(V.from + 'T00:00:00').getTime()));
+        if (V.to) p.set('to', String(new Date(V.to + 'T23:59:59').getTime()));
+        j = await workerGet('/sessions?' + p);
+      }
+      V.list = append ? V.list.concat(j.sessions) : j.sessions;
+      V.stats = j.stats; V.more = j.more;
+    } catch (e) { toast('تعذّر تحميل السلال: ' + e.message, true); V.list = V.list || []; }
+    finally { V.loading = false; }
+    if (S.tab === 'visits') render();
+  }
+
+  async function openVisit(id) {
+    const V = S.visits;
+    V.sel = id; V.detail = null;
+    render();
+    try {
+      if (DEMO) {
+        const s = V.list.find(x => x.id === id);
+        V.detail = { session: { ...s, note: '', cart_json: JSON.stringify(s.cart_value ? [{ t: 'الأكثر طلباً | 4 عطور', v: '', q: 1, p: s.cart_value, props: ['العطر الأول (110 مل): سوفاج ديور', 'العطر الثاني (110 مل): خمرة قهوة'] }] : []) },
+          events: [{ ts: s.updated, type: 'form', detail: 'تعبئة بيانات الطلب' }, { ts: s.updated - 60000, type: 'cart', detail: 'فتح صفحة السلة والطلب' },
+            { ts: s.updated - 120000, type: 'add', detail: 'الأكثر طلباً | 4 عطور' }, { ts: s.created, type: 'view', detail: s.landing }] };
+      } else V.detail = await workerGet('/sessions/' + encodeURIComponent(id));
+    } catch (e) { toast('تعذّر فتح السلة: ' + e.message, true); }
+    if (S.visits.sel === id) render();
+  }
+
+  function renderVisits() {
+    const V = S.visits;
+    if (!V.list) { app.innerHTML = '<div class="loading">جاري تحميل السلال…</div>'; loadVisits(); return; }
+    const st = V.stats || {}, pct = n => (st.visits ? Math.round((n || 0) / st.visits * 100) : 0) + '%';
+    const cards = [['نشطة الآن', st.active || 0], ['خاملة', st.idle || 0], ['غير مكتملة', st.incomplete || 0], ['بانتظار المتابعة', st.pending || 0], ['قيمة السلال للاسترداد', `${+(st.value || 0).toFixed(2)} د.أ`]];
+    app.innerHTML = `
+      <div class="vis-stats">${cards.map(([l, n]) => `<div><small>${l}</small><b>${n}</b></div>`).join('')}</div>
+      <div class="card vis-bar">
+        <div class="vis-chips">${VISIT_FILTERS.map(([k, l]) => `<button class="vis-chip" data-vfilter="${k}" aria-pressed="${V.filter === k}">${l}</button>`).join('')}</div>
+        <div class="vis-search">
+          <input class="input" type="search" placeholder="ابحث بالاسم، الرقم، المحافظة، رقم الطلب…" value="${esc(V.q)}" data-vq>
+          <input class="input" type="date" value="${esc(V.from)}" data-vfrom aria-label="من تاريخ"><input class="input" type="date" value="${esc(V.to)}" data-vto aria-label="إلى تاريخ">
+          <button class="btn btn--sm" data-vreload>🔄 تحديث</button>
+        </div>
+      </div>
+      <div class="vis-grid">
+        <div class="vis-side">
+          <div class="vis-src">${[['فيسبوك', st.facebook], ['إنستغرام', st.instagram], ['جوجل', st.google], ['آيفون', st.ios], ['أندرويد', st.android], ['ارتداد (< 3ث)', st.bounce]]
+            .map(([l, n]) => `<div><small>${l}</small><b>${pct(n)}</b></div>`).join('')}</div>
+          <label class="vis-empty"><span>عرض كل الزيارات (حتى اللي ما أضافت إشي للسلة)</span><input type="checkbox" data-vempty ${V.empty ? 'checked' : ''}></label>
+          <div class="vis-list">
+            ${V.list.map(visitRow).join('') || '<div class="empty">ما في سلال هون</div>'}
+            ${V.more ? '<button class="btn btn--block" data-vmore>تحميل المزيد</button>' : ''}
+          </div>
+        </div>
+        <div class="vis-detail ${V.sel ? 'is-on' : ''}">${visitDetail()}</div>
+      </div>`;
+  }
+
+  function visitRow(v) {
+    const [label, cls] = visitState(v);
+    return `<button class="vis-row ${S.visits.sel === v.id ? 'is-sel' : ''}" data-visit="${esc(v.id)}">
+      <div class="vis-row__top"><code>${esc(v.id.slice(0, 12))}</code><span class="badge ${cls}">${label}</span><span class="vis-chip-sm">${DEVICES[v.device] || v.device || ''}</span>
+        <span class="muted small" style="margin-inline-start:auto">⏱️ ${span(v.created, v.updated)} · ${ago(v.updated)}</span></div>
+      <div class="vis-row__mid"><b>${esc(v.name || 'زائر')}</b>${v.phone ? ` <span dir="ltr" class="muted small">${esc(v.phone)}</span>` : ''}
+        <b class="vis-row__val">${v.cart_value ? `${+v.cart_value.toFixed(2)} د.أ` : ''}</b></div>
+      <div class="muted small">${SOURCES[v.source] || esc(v.source || '')} · ${esc(v.landing || '/')}${v.order_name ? ` · طلب ${esc(v.order_name)}` : ''}${v.status === 'followed' ? ' · ✓ تمت المتابعة' : v.status === 'ignored' ? ' · تم التجاهل' : ''}</div>
+    </button>`;
+  }
+
+  function visitDetail() {
+    const V = S.visits;
+    if (!V.sel) return '<div class="vis-pick">🛒<p>اختر سلة من القائمة لعرض التفاصيل الكاملة</p></div>';
+    if (!V.detail) return '<div class="loading">جاري التحميل…</div>';
+    const s = V.detail.session, ev = V.detail.events || [], [label, cls] = visitState(s);
+    let items = [];
+    try { items = JSON.parse(s.cart_json || '[]'); } catch {}
+    const summary = [`سلة ${s.name || 'زائر'}${s.phone ? ' · ' + s.phone : ''}`, ...items.map(i => `• ${i.t}${i.v ? ' (' + i.v + ')' : ''} × ${i.q} — ${i.p} د.أ${(i.props || []).length ? '\n   ' + i.props.join('\n   ') : ''}`),
+      `المجموع: ${+(+s.cart_value).toFixed(2)} د.أ`, [s.gov, s.area].filter(Boolean).join(' / ')].filter(Boolean).join('\n');
+    const copy = (text, l) => `<button class="btn btn--sm" data-copy="${esc(text)}">⧉ ${l}</button>`;
+    return `
+      <div class="vis-d__head"><button class="btn btn--sm vis-back" data-vback>→ رجوع</button><div><small class="muted">معرّف الزيارة</small><code>${esc(s.id)}</code></div><span class="badge ${cls}">${label}</span></div>
+      <section class="vis-d__box">
+        <small class="muted">العميل والهاتف</small>
+        <b class="vis-d__name">${esc(s.name || 'زائر (ما كتب اسمه)')}</b>
+        <div class="muted small">${[s.phone && `<span dir="ltr">${esc(s.phone)}</span>`, s.gov, s.area].filter(Boolean).join(' · ') || 'ما كتب بياناته'} · ${DEVICES[s.device] || ''} · ${SOURCES[s.source] || esc(s.source || '')}</div>
+        <div class="actions">
+          ${s.phone ? `<a class="btn btn--sm btn--wa" href="https://api.whatsapp.com/send?phone=${waPhone(s.phone)}" target="_blank" rel="noopener">💬 واتساب</a>${copy(s.phone, 'نسخ الرقم')}` : '<span class="btn btn--sm" aria-disabled="true">واتساب غير متاح</span>'}
+          ${copy(summary, 'نسخ ملخص السلة')}${copy(s.id, 'نسخ المعرّف')}
+          <a class="btn btn--sm btn--clarity" href="${clarityUrl(s.id)}" target="_blank" rel="noopener">📹 فتح التسجيل في Clarity</a>
+        </div>
+      </section>
+      ${s.phone && s.stage !== 'completed' ? `<section class="vis-d__box vis-d__wa">
+        <b>💬 إرسال رسالة واتساب من رقم المحل</b>
+        <textarea class="input" rows="3" data-vmsg>${esc(VISIT_MESSAGE)}</textarea>
+        <div class="actions"><button class="btn btn--primary btn--sm" data-vsend>إرسال الآن عبر الواتساب</button><span class="muted small">بعد الإرسال بتصير الحالة «تمت المتابعة»</span></div>
+      </section>` : ''}
+      <section class="vis-d__box">
+        <b>حالة المتابعة والملاحظات</b>
+        <div class="actions">${[['followed', '✓ تمت المتابعة'], ['ignored', 'تم التجاهل'], ['', 'إلغاء التحديد']].map(([k, l]) => `<button class="btn btn--sm ${s.status === k && k ? 'btn--primary' : ''}" data-vstatus="${k}">${l}</button>`).join('')}</div>
+        <textarea class="input" rows="2" maxlength="500" placeholder="ملاحظات داخلية…" data-vnote>${esc(s.note || '')}</textarea>
+        <div class="actions"><button class="btn btn--sm" data-vsavenote>حفظ الملاحظات</button></div>
+      </section>
+      <section class="vis-d__box">
+        <b>محتويات السلة (${items.length})${s.cart_value ? ` · ${+(+s.cart_value).toFixed(2)} د.أ` : ''}</b>
+        ${items.map(i => `<div class="vis-item"><div><b>${esc(i.t)}</b>${i.v ? ` <span class="muted small">${esc(i.v)}</span>` : ''}${(i.props || []).map(p => `<div class="muted small">${esc(p)}</div>`).join('')}</div><span>${i.q}x · ${i.p} د.أ</span></div>`).join('') || '<div class="muted small">السلة فاضية</div>'}
+      </section>
+      <section class="vis-d__box">
+        <b>رحلة الزيارة (${ev.length})</b>
+        <ol class="vis-timeline">${ev.map(e => `<li><b>${EVENT_LABELS[e.type] || esc(e.type)}</b>${e.detail ? `<span>${esc(e.detail)}</span>` : ''}<small>${new Date(e.ts).toLocaleString('ar-JO', { timeZone: 'Asia/Amman', day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></li>`).join('')}</ol>
+      </section>`;
+  }
+
+  async function visitAction(el) {
+    const V = S.visits, d = el.dataset, s = V.detail?.session;
+    if ('vfilter' in d) { V.filter = d.vfilter; V.list = null; return render(); }
+    if ('vreload' in d) { V.list = null; return render(); }
+    if ('vmore' in d) return loadVisits(true);
+    if ('visit' in d) return openVisit(d.visit);
+    if ('vback' in d) { V.sel = null; return render(); }
+    if (!s) return;
+    const save = async (body, msg) => {
+      try {
+        if (!DEMO) await workerGet('/sessions/' + encodeURIComponent(s.id), { method: 'POST', body: JSON.stringify(body) });
+        Object.assign(s, body.status !== undefined ? { status: body.status } : {}, body.note !== undefined ? { note: body.note } : {});
+        const row = V.list.find(x => x.id === s.id); if (row && body.status !== undefined) row.status = body.status;
+        toast(msg); render();
+      } catch (e) { toast('حصل خطأ: ' + e.message, true); }
+    };
+    if ('vstatus' in d) return save({ status: d.vstatus, event: 'status', detail: d.vstatus === 'followed' ? 'تمت المتابعة' : d.vstatus === 'ignored' ? 'تم التجاهل' : 'إلغاء الحالة' }, 'انحفظت الحالة');
+    if ('vsavenote' in d) return save({ note: $('[data-vnote]', app).value }, 'انحفظت الملاحظات');
+    if ('vsend' in d) {
+      const text = $('[data-vmsg]', app).value.trim();
+      if (!text || !await confirmBox(`إرسال الرسالة لـ ${s.name || s.phone} على الواتساب؟`)) return;
+      el.disabled = true;
+      const err = await sendText({ phone: s.phone }, text);
+      if (err) { el.disabled = false; return toast('الرسالة ما انبعتت: ' + err, true); }
+      return save({ status: 'followed', event: 'message', detail: text.slice(0, 200) }, 'انبعتت الرسالة ✓');
+    }
   }
 
   /* ---------------- Delivery company (Direct Delivery) ---------------- */
@@ -1898,11 +2147,22 @@ function reply(o) {
       render();
       const q = $('[data-q]'); q.focus(); q.setSelectionRange(pos, pos);
     }
+    // Visits search asks the server, so wait for a pause in typing.
+    if (e.target.matches('[data-vq]')) {
+      S.visits.q = e.target.value.trim();
+      clearTimeout(S.visits.timer);
+      S.visits.timer = setTimeout(async () => {
+        await loadVisits();
+        const q = $('[data-vq]'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+      }, 450);
+    }
   });
 
   app.addEventListener('change', e => {
     const el = e.target, row = el.closest('[data-id]'), p = row && find(row.dataset.id);
     if (el.matches('[data-ostatus]')) return orderStatus(S.orders.find(o => o.id === el.closest('[data-order-id]').dataset.orderId), el.value);
+    if (el.matches('[data-vempty]')) { S.visits.empty = el.checked; S.visits.list = null; return render(); }
+    if (el.matches('[data-vfrom], [data-vto]')) { S.visits[el.matches('[data-vfrom]') ? 'from' : 'to'] = el.value; S.visits.list = null; return render(); }
     if (el.matches('[data-ship-gov]')) { S.ship[el.closest('[data-order-id]').dataset.orderId] = { gov: el.value, area: '' }; return render(); }
     if (el.matches('[data-ship-area]')) { S.ship[el.closest('[data-order-id]').dataset.orderId].area = el.value; return; }
     if (el.matches('[data-cat]')) { S.cat = el.value; return render(); }
@@ -1923,6 +2183,7 @@ function reply(o) {
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
     if (el.matches('[data-copy]')) return copyText(el.dataset.copy);
+    if (['vfilter', 'vreload', 'vmore', 'visit', 'vback', 'vstatus', 'vsavenote', 'vsend'].some(k => k in el.dataset)) return visitAction(el);
     if (el.dataset.ship) {
       const box = el.closest('[data-order-id]');
       return shipAction(S.orders.find(o => o.id === box.dataset.orderId), el.dataset.ship, box);
@@ -1981,7 +2242,7 @@ function reply(o) {
     try {
       await api.load();
       S.productsReady = true;
-      if (S.tab !== 'orders' && !busy()) render(); else saveCache();
+      if (S.tab !== 'orders' && S.tab !== 'visits' && !busy()) render(); else saveCache();
     }
     catch (e) {
       console.error(e);
