@@ -270,6 +270,13 @@
     .odet__pick { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #f3e8cc; border-radius: 10px; padding: 7px 9px; }
     .odet__pick img, .odet__noimg { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex: none; background: #f1eee6; }
     .odet__pick b { font-size: 13px; }
+    .oedit__h { font-size: 15px; margin: 16px 0 8px; }
+    .oedit__h:first-of-type { margin-top: 0; }
+    .oedit__line { display: flex; flex-direction: column; gap: 6px; background: #fffaf0; border: 1px solid #f3e8cc; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+    .oedit__line > .btn { align-self: flex-start; }
+    .oedit__pick { display: grid; grid-template-columns: 1fr 92px auto 70px 32px; gap: 6px; align-items: center; }
+    .oedit__chk { display: flex; align-items: center; gap: 4px; font-size: 13px; white-space: nowrap; }
+    @media (max-width: 560px) { .oedit__pick { grid-template-columns: 1fr 1fr; } .oedit__pick [data-p-name] { grid-column: 1 / -1; } }
     .odet__n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: #b45309; color: #fff; font-size: 11px; font-weight: 800; }
     .odet__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
     .odet__tags span { font-size: 11px; border-radius: 999px; padding: 0 7px; background: #f1eee6; color: var(--muted); font-weight: 700; }
@@ -634,6 +641,11 @@
       if (!o.cancelled) check((await gql(`mutation($id: ID!) { orderClose(input: { id: $id }) { userErrors { message } } }`, { id: o.id })).orderClose);
       check((await gql(`mutation($id: ID!) { orderDelete(orderId: $id) { userErrors { message } } }`, { id: o.id })).orderDelete);
     },
+    async updateOrder(o, input) {
+      check((await gql(`mutation($i: OrderInput!) { orderUpdate(input: $i) { userErrors { message } } }`, { i: { id: o.id, ...input } })).orderUpdate);
+      const d = await gql(`query($id: ID!) { order(id: $id) { ${ORDER_FIELDS} } }`, { id: o.id });
+      return mapOrder(d.order);
+    },
     async saveOrderSettings(v) {
       check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
         { m: [{ ownerId: S.shopId, namespace: 'custom', key: 'order_messages', type: 'json', value: JSON.stringify(v) }] })).metafieldsSet);
@@ -690,6 +702,7 @@
           order(3, ['مؤكد'], 'Ali', 'Aldababseh', '0785550000', 'الزرقاء', 'الزرقاء الجديدة', [li('سوفاج ديور', '15.00')], '15.00')
         ].map(mapOrder);
       },
+      async updateOrder(o, input) { await wait(); return mapOrder({ ...o.raw, ...input, tags: o.tags }); },
       async saveOrderSettings() { await wait(); }
     };
   })();
@@ -1041,6 +1054,9 @@
   const EXTRA_RE = /\s*\+(\d+(?:\.\d+)?)\s*د\.أ\s*$/;
   const TAG_SENT = 'رسالة-التأكيد-انبعتت';
   const TAG_CONFIRMED = 'مؤكد';
+  const EDIT_KEY = '_تعديل_الطلب';
+  // An offer pick: "العطر الأول (110 مل)" → perfume name (hidden _ keys excluded).
+  const isSlot = a => !a.key.startsWith('_') && /\((110|50) مل\)/.test(a.key);
   const ORDER_DEFAULTS = {
     new_order: 'السلام عليكم ،[وقت التحية] [اسم العميل] 🌹\n\nفي عندك اوردر من عطور عصفور تفاصيله\n\n[تفاصيل العطور]\n\nسعر الاوردر شامل التوصيل : *[المبلغ]*\n\nالعنوان : [العنوان]\n\nالعطور بتيجي بزجاجنا الخاص \n[موعد التوصيل]\n---\nبتحب نأكد الطلب ؟',
     confirmed: 'تم تأكيد طلبك بنجاح من عطور عصفور 👑✨\n\nطلبك الآن قيد التجهيز بعناية، و[موعد التوصيل]\nإذا كان لديك أي استفسار أو تعديل نحن دائماً بخدمتك.\nشكراً لاختيارك وثقتك بعطور عصفور 🕊️',
@@ -1060,20 +1076,31 @@
     lineItems(first: 50) { nodes { title variantTitle quantity image { url } originalUnitPriceSet { shopMoney { amount } } customAttributes { key value } } }`;
 
   function mapOrder(n) {
-    const a = n.shippingAddress || {}, c = n.customer || {};
+    const a = n.shippingAddress || {}, c = n.customer || {}, attrs = n.customAttributes || [];
     const phone = a.phone || n.phone || c.phone || '';
-    const total = Number(n.totalPriceSet.shopMoney.amount), shipping = Number(n.totalShippingPriceSet?.shopMoney.amount || 0);
+    // Edits from «تعديل الطلب»: Shopify can't change line item properties or the total after the order is placed,
+    // so the changed picks and total ride on the order as one hidden attribute and replace the originals here.
+    let edit = {};
+    try { edit = JSON.parse(attrs.find(x => x.key === EDIT_KEY)?.value || '{}'); } catch {}
+    const shipping = Number(n.totalShippingPriceSet?.shopMoney.amount || 0);
+    const total = edit.total != null ? Number(edit.total) : Number(n.totalPriceSet.shopMoney.amount);
     return {
-      id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '',
+      id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '', attrs, edit, raw: n,
       // Orders from the cart page carry the Direct Delivery area the customer picked.
-      deliveryVillage: Number((n.customAttributes || []).find(a => a.key === '_delivery_village_id')?.value) || 0,
-      total, shipping, subtotal: Number(n.subtotalPriceSet?.shopMoney.amount ?? total - shipping),
+      deliveryVillage: Number(attrs.find(a => a.key === '_delivery_village_id')?.value) || 0,
+      total, shipping, subtotal: edit.total != null ? total - shipping : Number(n.subtotalPriceSet?.shopMoney.amount ?? total - shipping),
+      shopifyTotal: Number(n.totalPriceSet.shopMoney.amount),
       customer: [a.firstName || c.firstName, a.lastName || c.lastName].filter(Boolean).join(' ') || 'زبون',
       phone, city: a.city || '', address: [a.address1, a.address2].filter(Boolean).join(' / '),
-      // A second number the customer gave elsewhere (contact field or account), if it differs.
-      altPhone: [n.phone, c.phone].find(p => p && waPhone(p) !== waPhone(phone)) || (n.customAttributes || []).find(a => a.key === 'رقم بديل')?.value || '',
+      addr: { first: a.firstName || c.firstName || '', last: a.lastName || c.lastName || '', address1: a.address1 || '', address2: a.address2 || '' },
+      // An edited backup number wins; otherwise a second number the customer gave elsewhere (contact field or account), if it differs.
+      altPhone: 'alt' in edit ? edit.alt
+        : [n.phone, c.phone].find(p => p && waPhone(p) !== waPhone(phone)) || attrs.find(a => a.key === 'رقم بديل')?.value || '',
       // Offer choices travel as line item properties; hidden (_) ones and the upcharge line's own notes are left out.
-      items: n.lineItems.nodes.map(li => ({ title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount), image: li.image?.url || '',
+      items: n.lineItems.nodes.map((li, index) => {
+        const own = edit.picks?.[index] ? [...li.customAttributes.filter(x => !isSlot(x)), ...edit.picks[index].map(([key, value]) => ({ key, value }))] : li.customAttributes;
+        return { ...li, customAttributes: own, index };
+      }).map(li => ({ index: li.index, title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount), image: li.image?.url || '',
         attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key))
           .map(x => {
             const m = x.key.match(/\((110|50) مل\)/), extra = x.value.match(EXTRA_RE);
@@ -1150,7 +1177,7 @@
 
   // Line items that are real products (the top-grade difference line is internal; the total already includes it).
   const orderLines = o => o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض'));
-  const slotAttrs = li => li.attrs.filter(a => !a.key.startsWith('_') && /\((110|50) مل\)/.test(a.key));
+  const slotAttrs = li => li.attrs.filter(isSlot);
   // One entry per perfume: the offer's picks, or a single perfume once per unit (its grade sits in the variant).
   function itemEntries(li, byTitle) {
     const picks = slotAttrs(li);
@@ -1267,7 +1294,7 @@
         ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
           .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`)
       + (st === 'cancelled' ? '' : '<button class="btn btn--sm btn--cancel" data-oact="cancel">❌ انلغى الأوردر</button>')
-      + '<button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
+      + '<button class="btn btn--sm" data-oact="edit">✏️ تعديل</button><button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
     // Delivery: one click uploads with the area the customer picked (or the guess); once uploaded, the barcode opens the details.
     const barcode = shipBarcode(o);
     const ship = barcode ? `<button class="btn btn--sm btn--ship is-done" data-otoggle title="رقم الشحنة">🚚 ${esc(barcode)}</button>`
@@ -1340,6 +1367,108 @@
       </div>
       ${shipBox(o, copy)}
     </div>`;
+  }
+
+  /* ---------------- Order edit (like the old site's «تعديل الطلب») ---------------- */
+  const GOVS = ['عمان', 'إربد', 'الزرقاء', 'المفرق', 'البلقاء', 'الكرك', 'معان', 'الطفيلة', 'العقبة', 'جرش', 'عجلون', 'مادبا'];
+
+  function pickRow(p) {
+    return `<div class="oedit__pick" data-pick data-key="${esc(p.key || '')}">
+      <input class="input" list="oedit-perfumes" data-p-name value="${esc(p.base)}" placeholder="اسم العطر">
+      <select class="input" data-p-size><option value="110"${p.size === '110' ? ' selected' : ''}>110 مل</option><option value="50"${p.size === '50' ? ' selected' : ''}>50 مل</option></select>
+      <label class="oedit__chk"><input type="checkbox" data-p-top${p.top ? ' checked' : ''}> نخب أول</label>
+      <input class="input" type="number" min="0" step="0.5" data-p-extra value="${p.extra || ''}" placeholder="+ د.أ" title="زيادة النخب الأول">
+      <button type="button" class="icon-btn" data-p-del aria-label="شيل العطر">×</button></div>`;
+  }
+
+  function openOrderEdit(o) {
+    const byTitle = productsByTitle();
+    const lines = orderLines(o).map(li => {
+      const slots = slotAttrs(li);
+      if (!slots.length) return `<div class="oedit__line"><b>${esc(li.title)}</b><span class="muted small">${esc(li.variant)} · الكمية ${li.qty}x (عطر فردي)</span></div>`;
+      const picks = itemEntries(li, byTitle).map((e, i) => pickRow({ ...e, key: slots[i].key }));
+      return `<div class="oedit__line" data-line="${li.index}"><b>${esc(li.title)}</b>${picks.join('')}
+        <button type="button" class="btn btn--sm" data-p-add>＋ إضافة عطر للباقة</button></div>`;
+    }).join('');
+    const shipped = shipBarcode(o);
+    dlg.innerHTML = `<form method="dialog" data-oedit-form>
+      <div class="dlg-head"><h2 style="margin:0">تعديل الطلب ${esc(o.name)}</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
+      <div class="dlg-body">
+        ${shipped ? `<div class="note note--warn">الطلب مرفوع لشركة التوصيل (${esc(shipped)}). التعديل هون ما بيتغير عندهم، عدّله عندهم كمان.</div>` : ''}
+        ${o.tags.includes(TAG_CONFIRMED) && S.orderSettings.sheet_url ? '<div class="note">الطلب انرفع على الشيت قبل. التعديل ما بيتغير بالشيت لحاله.</div>' : ''}
+        <h3 class="oedit__h">🛍️ العطور</h3>
+        <datalist id="oedit-perfumes">${S.products.filter(p => p.status === 'ACTIVE').map(p => `<option value="${esc(p.title)}">`).join('')}</datalist>
+        ${lines}
+        <h3 class="oedit__h">💰 السعر</h3>
+        <div class="field"><label>المبلغ الإجمالي شامل التوصيل (د.أ)</label>
+          <input class="input" type="number" min="0" step="0.5" name="total" value="${o.total}" dir="ltr">
+          <span class="muted small">المبلغ اللي بيدفعه الزبون للمندوب. سعر شوبيفاي الأصلي: ${plainJod(o.shopifyTotal)}</span></div>
+        <h3 class="oedit__h">👤 بيانات المستلم والعنوان</h3>
+        <div class="grid2">
+          <div class="field"><label>الاسم الأول</label><input class="input" name="first" value="${esc(o.addr.first)}" required></div>
+          <div class="field"><label>اسم العائلة</label><input class="input" name="last" value="${esc(o.addr.last === '-' ? '' : o.addr.last)}"></div>
+          <div class="field"><label>رقم الهاتف الأساسي</label><input class="input" name="phone" dir="ltr" value="${esc(o.phone)}" required></div>
+          <div class="field"><label>رقم الهاتف البديل (اختياري)</label><input class="input" name="alt" dir="ltr" value="${esc(o.altPhone)}"></div>
+          <div class="field"><label>المحافظة</label><input class="input" name="city" list="oedit-govs" value="${esc(o.city)}">
+            <datalist id="oedit-govs">${GOVS.map(g => `<option value="${g}">`).join('')}</datalist></div>
+          <div class="field"><label>المنطقة / الحي</label><input class="input" name="address1" value="${esc(o.addr.address1)}"></div>
+        </div>
+        <div class="field"><label>تفاصيل الشارع والعمارة</label><input class="input" name="address2" value="${esc(o.addr.address2)}"></div>
+        <div class="field"><label>ملاحظات الزبون للتوصيل</label><textarea class="input" name="note" rows="2">${esc(o.note)}</textarea></div>
+      </div>
+      <div class="dlg-foot"><button class="btn btn--primary" type="submit" data-save>💾 حفظ التعديلات</button><button class="btn" type="button" data-close>إلغاء</button></div>
+    </form>`;
+    dlg.showModal();
+    const form = $('[data-oedit-form]', dlg);
+    dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+    form.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.matches('[data-p-del]')) b.closest('[data-pick]').remove();
+      if (b.matches('[data-p-add]')) b.insertAdjacentHTML('beforebegin', pickRow({ base: '', size: '110', top: false, extra: 0 }));
+    });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const f = form.elements, btn = $('[data-save]', dlg);
+      if (!f.first.value.trim()) return toast('اكتب اسم المستلم', true);
+      if (!waPhone(f.phone.value)) return toast('اكتب رقم الهاتف', true);
+      // Each offer line's picks, rebuilt the way the offer page writes them: "<name> (نخب أول) +5 د.أ" under "<slot> (110 مل)".
+      const picks = { ...(o.edit.picks || {}) };
+      let bad = false;
+      form.querySelectorAll('[data-line]').forEach(line => {
+        // New picks are numbered after the ones added in an earlier edit, so no two share a key.
+        let added = Math.max(0, ...[...line.querySelectorAll('[data-pick]')].map(r => Number(r.dataset.key.match(/^عطر إضافي (\d+)/)?.[1] || 0)));
+        picks[line.dataset.line] = [...line.querySelectorAll('[data-pick]')].map(row => {
+          const name = $('[data-p-name]', row).value.trim(), size = $('[data-p-size]', row).value;
+          const top = $('[data-p-top]', row).checked, extra = num($('[data-p-extra]', row).value) || 0;
+          if (!name) bad = true;
+          const key = row.dataset.key ? row.dataset.key.replace(/\((110|50) مل\)/, `(${size} مل)`) : `عطر إضافي ${++added} (${size} مل)`;
+          const onlyTop = byTitle.get(name)?.tags.includes('نخب-أول-فقط');
+          return [key, `${name}${top && !onlyTop ? ' (نخب أول)' : ''}${extra ? ` +${extra} د.أ` : ''}`];
+        });
+      });
+      if (bad) return toast('في عطر بدون اسم، اكتبه أو شيله', true);
+      const total = num(f.total.value);
+      const edit = { picks, ...(total != null && total !== o.shopifyTotal ? { total } : {}), alt: f.alt.value.trim() };
+      const city = f.city.value.trim(), address1 = f.address1.value.trim();
+      // A changed area drops the Direct Delivery ids the customer picked, so the upload matches the new address.
+      const moved = city !== o.city || address1 !== o.addr.address1;
+      const keep = o.attrs.filter(a => a.key !== EDIT_KEY && a.key !== 'رقم بديل'
+        && !(moved && ['_delivery_city_id', '_delivery_village_id', 'منطقة التوصيل'].includes(a.key)));
+      const input = {
+        note: f.note.value,
+        shippingAddress: { firstName: f.first.value.trim(), lastName: f.last.value.trim() || '-', phone: '+' + waPhone(f.phone.value), city, address1,
+          address2: f.address2.value.trim(), countryCode: 'JO' },
+        customAttributes: [...keep.map(({ key, value }) => ({ key, value })), ...(edit.alt ? [{ key: 'رقم بديل', value: edit.alt }] : []),
+          { key: EDIT_KEY, value: JSON.stringify(edit) }]
+      };
+      btn.disabled = true; btn.textContent = 'جاري الحفظ…';
+      try {
+        const fresh = await api.updateOrder(o, input);
+        S.orders[S.orders.indexOf(o)] = fresh;
+        delete S.shipStatus[o.id];
+        toast('انحفظ التعديل ✓'); dlg.close(); render();
+      } catch (err) { console.error(err); toast('ما انحفظ: ' + err.message, true); btn.disabled = false; btn.textContent = '💾 حفظ التعديلات'; }
+    });
   }
 
   async function copyText(text) {
@@ -1644,6 +1773,7 @@
 
   async function orderAction(o, act) {
     const st = S.orderSettings;
+    if (act === 'edit') return openOrderEdit(o);
     if (act === 'send') {
       if (!openWhatsApp(o, fillMessage(st.new_order, o)) || o.tags.includes(TAG_SENT)) return;
       return run('', async () => { await api.addTags(o, [TAG_SENT]); o.tags.push(TAG_SENT); });
