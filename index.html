@@ -1700,6 +1700,9 @@
   }
   const shipPick = o => (S.ship[o.id] ||= guessArea(o));
   const pickedArea = o => { const p = shipPick(o); return DELIVERY_AREAS.find(([g]) => g === p.gov)?.[1].find(a => a[2] === Number(p.area)); };
+  // The company's «وصف العنوان»: the area details the customer wrote at checkout (street, building, landmark);
+  // older orders without them send the governorate and area as before.
+  const shipDesc = o => o.addr.address2 || [shipPick(o).gov, pickedArea(o)?.[0], o.address].filter(Boolean).join(' / ');
 
   function shipBox(o, copy) {
     const barcode = shipBarcode(o), head = '<div class="odet__h"><span>🚚 شركة التوصيل (Direct Delivery)</span></div>';
@@ -1720,6 +1723,7 @@
         <label>المنطقة<select class="input" data-ship-area ${areas.length ? '' : 'disabled'}><option value="">اختر المنطقة…</option>
           ${areas.map(([n, , v]) => `<option value="${v}" ${v === Number(pick.area) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
         <label>المبلغ المطلوب تحصيله (د.أ)<input class="input" type="number" step="0.5" value="${+o.total.toFixed(2)}" data-ship-cod></label>
+        <label>وصف العنوان<input class="input" data-ship-desc value="${esc(shipDesc(o))}"></label>
         <label>ملاحظات للسائق (اختياري)<input class="input" data-ship-notes value="${esc(o.note)}"></label>
       </div>
       <button class="btn btn--primary" data-ship="create">🚚 رفع الطلب لشركة التوصيل</button></section>`;
@@ -1744,10 +1748,11 @@
       if (!area) { S.openOrders.add(o.id); render(); return toast('اختار المحافظة والمنطقة بقسم شركة التوصيل', true); }
       // The details' fields when they are open, else the order's own total and note.
       const cod = Number(box.querySelector('[data-ship-cod]')?.value ?? o.total), notes = (box.querySelector('[data-ship-notes]')?.value ?? o.note).trim();
+      const desc = (box.querySelector('[data-ship-desc]')?.value ?? shipDesc(o)).trim() || [gov, area[0]].join(' / ');
       if (!await confirmBox(`رفع الطلب ${o.name} لشركة التوصيل؟\n${o.customer} · ${gov} / ${area[0]} · تحصيل ${cod} د.أ`)) return;
       return run('انرفع الطلب لشركة التوصيل ✓', async () => {
         const r = await call('ship', 'POST', { orderId: o.id.split('/').pop(), invoice: o.name.replace('#', ''), name: o.customer, phone: sheetRow(o).phone,
-          phone2: o.altPhone, cod, notes, description: orderTexts(o).sheet, address: [gov, area[0], o.address].filter(Boolean).join(' / '), cityId: area[1], villageId: area[2] });
+          phone2: o.altPhone, cod, notes, description: orderTexts(o).sheet, address: desc, cityId: area[1], villageId: area[2] });
         const tag = SHIP_TAG + r.barcode;
         await api.addTags(o, [tag]); o.tags.push(tag);
         S.shipStatus[o.id] = 'PENDING_CUSTOMER_CARE_APPROVAL';
