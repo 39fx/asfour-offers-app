@@ -1882,7 +1882,7 @@ function doPost(e) {
     set(5, d.customer);
     set(6, d.offer);
     set(7, d.details);
-    set(8, d.note || '');
+    set(11, d.note || '');   // ملاحظة الزبون على الطلب ← «ملاحظات التوصيل»
     set(9, d.location);
     set(10, String(d.phone));
     const [y, m, day] = d.date.split('-').map(Number);
@@ -1909,6 +1909,8 @@ function doPost(e) {
 function matchKey(keys, name) {
   const norm = s => String(s).split('\\n')[0].replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\\s+/g, ' ').trim();
   const n = norm(name), nt = n.split(' ');
+  // الاسم المطابق تماماً أولاً، عشان «سوفاج» ما يروح على «سوفاج الكسير».
+  const exact = keys.find(k => norm(k) === n); if (exact) return exact;
   let best = null;
   keys.forEach(k => {
     const kn = norm(k), kt = kn.split(' ');
