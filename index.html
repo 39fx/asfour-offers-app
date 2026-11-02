@@ -1566,6 +1566,10 @@
     dlg.showModal();
     const form = $('[data-mo-form]', dlg), f = form.elements, adder = $('[data-mo-adder]', dlg);
     dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+    // Escape (often pressed to close a dropdown) mustn't throw away a half-typed order; only × and «إلغاء» close it.
+    const keep = e => { if (cart.length || f.name.value.trim() || f.phone.value.trim()) e.preventDefault(); };
+    dlg.addEventListener('cancel', keep);
+    dlg.addEventListener('close', () => dlg.removeEventListener('cancel', keep), { once: true });
 
     // The areas of the chosen governorate; a name picked from the list resolves to Direct Delivery's ids.
     const govAreas = () => DELIVERY_AREAS.find(([g]) => g === f.gov.value)?.[1] || [];
