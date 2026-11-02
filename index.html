@@ -276,6 +276,20 @@
     .oedit__line > .btn { align-self: flex-start; }
     .oedit__pick { display: grid; grid-template-columns: 1fr 92px auto 70px 32px; gap: 6px; align-items: center; }
     .oedit__chk { display: flex; align-items: center; gap: 4px; font-size: 13px; white-space: nowrap; }
+    .mo-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .mo-kinds .btn[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: transparent; }
+    .mo-adder { background: #fafaf8; border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .mo-adder .btn--block { width: 100%; margin-top: 6px; }
+    .grid3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; }
+    @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr 1fr; } .grid3 > :first-child { grid-column: 1 / -1; } }
+    .mo-cart { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .mo-line { display: grid; grid-template-columns: 1fr auto 32px; gap: 8px; align-items: center; padding: 8px 10px; }
+    .mo-line + .mo-line { border-top: 1px solid var(--line); }
+    .mo-line__price { font-weight: 700; white-space: nowrap; }
+    .mo-line--sum { grid-template-columns: 1fr auto; background: #fafaf8; }
+    .mo-total { display: flex; justify-content: space-between; align-items: center; background: #f0f7f3; border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+    .mo-total b { font-size: 20px; color: var(--primary); }
+    .mo-chk { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 6px 0; }
     @media (max-width: 560px) { .oedit__pick { grid-template-columns: 1fr 1fr; } .oedit__pick [data-p-name] { grid-column: 1 / -1; } }
     .odet__n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: #b45309; color: #fff; font-size: 11px; font-weight: 800; }
     .odet__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
@@ -646,6 +660,20 @@
       const d = await gql(`query($id: ID!) { order(id: $id) { ${ORDER_FIELDS} } }`, { id: o.id });
       return mapOrder(d.order);
     },
+    // A manual order, with the customer linked by phone; if that's refused it goes in without one.
+    async createOrder(order) {
+      const create = o => gql(`mutation($o: OrderCreateOrderInput!, $opt: OrderCreateOptionsInput) {
+          orderCreate(order: $o, options: $opt) { order { ${ORDER_FIELDS} } userErrors { field message } } }`,
+        { o, opt: { inventoryBehaviour: 'DECREMENT_IGNORING_POLICY', sendReceipt: false, sendFulfillmentReceipt: false } });
+      let d;
+      try { d = await create(order); check(d.orderCreate); }
+      catch (e) {
+        console.warn('orderCreate with customer', e);
+        const { customer, ...rest } = order;
+        d = await create(rest); check(d.orderCreate);
+      }
+      return mapOrder(d.orderCreate.order);
+    },
     async saveOrderSettings(v) {
       check((await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
         { m: [{ ownerId: S.shopId, namespace: 'custom', key: 'order_messages', type: 'json', value: JSON.stringify(v) }] })).metafieldsSet);
@@ -703,6 +731,16 @@
         ].map(mapOrder);
       },
       async updateOrder(o, input) { await wait(); return mapOrder({ ...o.raw, ...input, tags: o.tags }); },
+      async createOrder(o) {
+        await wait();
+        const total = o.lineItems.reduce((n, li) => n + li.quantity * Number(li.priceSet.shopMoney.amount), 0) + Number(o.shippingLines[0].priceSet.shopMoney.amount)
+          - Number(o.discountCode?.itemFixedDiscountCode.amountSet.shopMoney.amount || 0);
+        const titleOf = id => S.products.concat(S.offers).find(p => p.variants.some(v => v.id === id))?.title || '';
+        return mapOrder({ id: 'ord' + Date.now(), name: '#' + (1100 + S.orders.length), createdAt: new Date().toISOString(), cancelledAt: null, tags: o.tags, note: o.note,
+          customAttributes: o.customAttributes, totalPriceSet: { shopMoney: { amount: String(total) } }, phone: o.phone, customer: null, shippingAddress: o.shippingAddress,
+          lineItems: { nodes: o.lineItems.map(li => ({ title: li.title || titleOf(li.variantId), variantTitle: '', quantity: li.quantity, originalUnitPriceSet: li.priceSet,
+            customAttributes: li.properties.map(x => ({ key: x.name, value: x.value })) })) } });
+      },
       async saveOrderSettings() { await wait(); }
     };
   })();
@@ -1276,7 +1314,7 @@
       </div>
       <div class="card">
         <div class="toolbar"><span class="grow muted small">آخر ${S.orders.length} طلب. «رسالة التأكيد» بتفتح الواتساب والرسالة جاهزة، وإنت بتكبس إرسال.</span>
-          <button class="btn btn--sm" data-oreload>تحديث</button><button class="btn btn--sm" data-osettings>الإعدادات</button></div>
+          <button class="btn btn--sm btn--primary" data-onew>➕ طلب يدوي</button><button class="btn btn--sm" data-oreload>تحديث</button><button class="btn btn--sm" data-osettings>الإعدادات</button></div>
         ${list.map(orderRow).join('') || '<div class="empty">ما في طلبات هون</div>'}
       </div>`;
   }
@@ -1468,6 +1506,243 @@
         delete S.shipStatus[o.id];
         toast('انحفظ التعديل ✓'); dlg.close(); render();
       } catch (err) { console.error(err); toast('ما انحفظ: ' + err.message, true); btn.disabled = false; btn.textContent = '💾 حفظ التعديلات'; }
+    });
+  }
+
+  /* ---------------- Manual order («طلب يدوي») ---------------- */
+  // An order taken by phone or chat, like the old site's admin. It goes straight into Shopify in the same shape as a
+  // cart-page order (offer picks as line properties, the Direct Delivery area as attributes), so the sheet, the
+  // messages and the delivery upload work on it as on any order. Tagged طلب-يدوي: the worker sends no automatic
+  // WhatsApp for it; the form's own checkbox decides.
+  const MANUAL_TAG = 'طلب-يدوي';
+  const ORDINALS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن'];
+  function openManualOrder() {
+    const st = S.orderSettings, byTitle = productsByTitle();
+    const perfumes = S.products.filter(p => p.status === 'ACTIVE').sort(byPriority);
+    const offers = S.offers.filter(o => o.status === 'ACTIVE');
+    const cart = [];   // { title, sub, variantId, qty, price, props: [[key, value]] }
+    let kind = 'single', offer = null;
+    const money = n => `${+Number(n).toFixed(2)} د.أ`;
+    dlg.innerHTML = `<form data-mo-form novalidate>
+      <div class="dlg-head"><h2 style="margin:0">➕ إضافة طلب يدوي</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
+      <div class="dlg-body">
+        <datalist id="oedit-perfumes">${perfumes.map(p => `<option value="${esc(p.title)}">`).join('')}</datalist>
+        <h3 class="oedit__h">👤 بيانات الزبون والتوصيل</h3>
+        <div class="grid2">
+          <div class="field"><label>اسم الزبون الكامل *</label><input class="input" name="name" placeholder="مثال: محمد أحمد"></div>
+          <div class="field"><label>رقم الهاتف *</label><input class="input" name="phone" dir="ltr" inputmode="tel" placeholder="079xxxxxxx"></div>
+          <div class="field"><label>رقم بديل (اختياري)</label><input class="input" name="alt" dir="ltr" inputmode="tel" placeholder="078xxxxxxx"></div>
+          <div class="field"><label>المحافظة *</label><select class="input" name="gov"><option value="">اختر المحافظة…</option>
+            ${DELIVERY_AREAS.map(([g]) => `<option>${esc(g)}</option>`).join('')}</select></div>
+        </div>
+        <div class="field"><label>المنطقة (من قائمة شركة التوصيل)</label><input class="input" name="area" list="mo-areas" placeholder="اختار المحافظة أول، بعدين اكتب اسم المنطقة" autocomplete="off">
+          <datalist id="mo-areas"></datalist></div>
+        <div class="field"><label>العنوان بالتفصيل</label><input class="input" name="address2" placeholder="الشارع، العمارة، أقرب معلم"></div>
+        <div class="field"><label>ملاحظات التوصيل للمندوب</label><textarea class="input" name="note" rows="2" placeholder="مثال: الاتصال قبل الوصول"></textarea></div>
+
+        <h3 class="oedit__h">🛍️ العطور والعروض</h3>
+        <div class="mo-kinds">${[['single', '🧴 عطر فردي'], ['offer', '🎁 باقة / عرض'], ['custom', '✏️ مخصص']]
+          .map(([k, l]) => `<button type="button" class="btn btn--sm" data-mo-kind="${k}" aria-pressed="${k === kind}">${l}</button>`).join('')}</div>
+        <div class="mo-adder" data-mo-adder></div>
+        <div data-mo-cart></div>
+
+        <h3 class="oedit__h">💰 الحساب</h3>
+        <div class="grid2">
+          <div class="field"><label>أجور التوصيل (د.أ)</label><input class="input" type="number" min="0" step="0.5" name="fee" value="0" dir="ltr"></div>
+          <div class="field"><label>خصم (د.أ)</label><input class="input" type="number" min="0" step="0.5" name="discount" value="0" dir="ltr"></div>
+        </div>
+        <div class="mo-total"><span>المجموع الصافي للدفع</span><b data-mo-total>0 د.أ</b></div>
+
+        <h3 class="oedit__h">⚙️ حالة الطلب</h3>
+        <div class="field"><label>الحالة</label><select class="input" name="status">
+          <option value="confirmed">✅ مؤكد (تم الاتفاق مع الزبون)</option><option value="new">🆕 جديد (لسا بدو تأكيد)</option></select></div>
+        <div class="field"><label>ملاحظة داخلية (ما بتطلع للزبون ولا للمندوب)</label><input class="input" name="internal" placeholder="مثال: طلب عبر الهاتف، زبون دائم"></div>
+        <label class="mo-chk"><input type="checkbox" name="wa"> 📩 ابعت رسالة للزبون على الواتساب (رسالة التأكيد أو رسالة الطلب الجديد حسب الحالة)</label>
+        ${st.sheet_url ? '<label class="mo-chk"><input type="checkbox" name="sheet" checked> 📄 ارفعه على جوجل شيت (للطلب المؤكد)</label>' : ''}
+        <label class="mo-chk"><input type="checkbox" name="ship"> 🚚 ارفعه على شركة التوصيل فوراً</label>
+      </div>
+      <div class="dlg-foot"><button class="btn btn--primary" type="submit" data-save>✅ تثبيت الطلب</button><button class="btn" type="button" data-close>إلغاء</button></div>
+    </form>`;
+    dlg.showModal();
+    const form = $('[data-mo-form]', dlg), f = form.elements, adder = $('[data-mo-adder]', dlg);
+    dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+
+    // The areas of the chosen governorate; a name picked from the list resolves to Direct Delivery's ids.
+    const govAreas = () => DELIVERY_AREAS.find(([g]) => g === f.gov.value)?.[1] || [];
+    f.gov.addEventListener('change', () => {
+      const seen = new Set();
+      $('#mo-areas', dlg).innerHTML = govAreas().filter(([n]) => !seen.has(n) && seen.add(n)).map(([n]) => `<option value="${esc(n)}">`).join('');
+      f.area.value = '';
+    });
+    const areaOf = () => { const n = normAr(f.area.value); return n ? govAreas().find(([name]) => normAr(name) === n) : null; };
+
+    const subtotal = () => cart.reduce((n, l) => n + l.qty * l.price, 0);
+    const total = () => Math.max(0, subtotal() + (num(f.fee.value) || 0) - (num(f.discount.value) || 0));
+    function renderCart() {
+      $('[data-mo-cart]', dlg).innerHTML = cart.length ? `<div class="mo-cart">${cart.map((l, i) => `<div class="mo-line">
+          <div><b>${esc(l.title)}</b>${l.sub ? `<div class="muted small">${esc(l.sub)}</div>` : ''}</div>
+          <span class="mo-line__price">${l.qty > 1 ? `${l.qty} × ` : ''}${money(l.price)}</span>
+          <button type="button" class="icon-btn" data-mo-del="${i}" aria-label="شيل">×</button></div>`).join('')}
+          <div class="mo-line mo-line--sum"><span>المجموع الفرعي</span><b>${money(subtotal())}</b></div></div>`
+        : '<div class="empty small">لسا ما أضفت إشي للطلب. اختار عطر أو عرض من فوق واكبس «إضافة للطلب».</div>';
+      $('[data-mo-total]', dlg).textContent = money(total());
+      $('[data-save]', dlg).textContent = `✅ تثبيت الطلب (${money(total())})`;
+    }
+
+    // The part that adds one thing to the order: a single perfume, an offer with its picks, or a free-text item.
+    function renderAdder() {
+      dlg.querySelectorAll('[data-mo-kind]').forEach(b => b.setAttribute('aria-pressed', b.dataset.moKind === kind));
+      if (kind === 'single') adder.innerHTML = `
+        <div class="field"><label>العطر (ابحث بالاسم)</label><input class="input" list="oedit-perfumes" data-mo-perfume placeholder="مثال: سوفاج ديور" autocomplete="off"></div>
+        <div class="grid3">
+          <div class="field"><label>الحجم / الصنف</label><select class="input" data-mo-variant disabled><option>اختار العطر أول</option></select></div>
+          <div class="field"><label>الكمية</label><input class="input" type="number" min="1" value="1" data-mo-qty dir="ltr"></div>
+          <div class="field"><label>سعر الحبة (د.أ)</label><input class="input" type="number" min="0" step="0.5" data-mo-price dir="ltr"></div>
+        </div>
+        <label class="mo-chk"><input type="checkbox" data-mo-tester> 🎁 إرفاق تستر هدية مجاني مع العطر</label>`;
+      if (kind === 'offer') adder.innerHTML = `
+        <div class="field"><label>العرض</label><select class="input" data-mo-offer><option value="">اختر العرض…</option>
+          ${offers.map(o => `<option value="${esc(o.id)}">${esc(o.title)} · ${money(o.variants[0]?.price || 0)}</option>`).join('')}</select></div>
+        <div data-mo-slots></div>
+        <div class="field"><label>سعر العرض (د.أ) <span class="muted small">بيتحسب لحاله مع زيادات النخب الأول، وبتقدر تغيره</span></label>
+          <input class="input" type="number" min="0" step="0.5" data-mo-price dir="ltr"></div>`;
+      if (kind === 'custom') adder.innerHTML = `
+        <div class="note">عطر أو منتج مش موجود بالكتالوج.</div>
+        <div class="grid3">
+          <div class="field"><label>الاسم</label><input class="input" data-mo-title placeholder="اكتب اسم العطر أو المنتج"></div>
+          <div class="field"><label>الكمية</label><input class="input" type="number" min="1" value="1" data-mo-qty dir="ltr"></div>
+          <div class="field"><label>السعر (د.أ)</label><input class="input" type="number" min="0" step="0.5" data-mo-price dir="ltr"></div>
+        </div>`;
+      adder.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn--primary btn--block" data-mo-add>＋ إضافة للطلب</button>');
+    }
+    // An offer's slots come from its page settings: N paid perfumes of its size, plus the free 50 ml one if it has it.
+    async function pickOffer(id) {
+      offer = offers.find(o => o.id === id) || null;
+      const box = $('[data-mo-slots]', adder);
+      if (!offer) { box.innerHTML = ''; return; }
+      if (!DEMO && offer.config === undefined) { box.innerHTML = '<div class="muted small">جاري تحميل العرض…</div>'; await api.loadOfferDetails(offer); }
+      const c = offerConfig(offer);
+      const slots = Array.from({ length: c.slot_count }, (_, i) => [`العطر ${ORDINALS[i] || i + 1}`, String(c.slot_size)]);
+      if (c.gift_slot) slots.push(['عطر مجاني هدية', '50']);
+      box.innerHTML = `<div class="oedit__line">${slots.map(([key, size]) => `<small class="muted">${esc(key)}</small>${pickRow({ base: '', size, top: false, extra: 0, key })}`).join('')}</div>`;
+      offerPrice();
+    }
+    const offerPrice = () => {
+      if (!offer) return;
+      const extras = [...adder.querySelectorAll('[data-p-extra]')].reduce((n, x) => n + (num(x.value) || 0), 0);
+      $('[data-mo-price]', adder).value = +(Number(offer.variants[0]?.price || 0) + extras).toFixed(2);
+    };
+
+    function addItem() {
+      const price = num($('[data-mo-price]', adder)?.value), qty = Math.max(1, parseInt($('[data-mo-qty]', adder)?.value, 10) || 1);
+      if (kind === 'single') {
+        const p = byTitle.get($('[data-mo-perfume]', adder).value.trim()), v = p?.variants.find(x => x.id === $('[data-mo-variant]', adder).value);
+        if (!p || !v) return toast('اختار العطر من القائمة والحجم', true);
+        const tester = $('[data-mo-tester]', adder).checked;
+        cart.push({ title: p.title, sub: v.title + (tester ? ' · مع تستر هدية' : ''), variantId: v.id, qty, price: price ?? Number(v.price),
+          props: tester ? [['هدية', 'تستر مجاني']] : [] });
+      }
+      if (kind === 'offer') {
+        if (!offer) return toast('اختار العرض', true);
+        // Written the way the offer page writes them: "<name> (نخب أول) +5 د.أ" under "<slot> (110 مل)".
+        const picks = [...adder.querySelectorAll('[data-pick]')].map(row => {
+          const name = $('[data-p-name]', row).value.trim(), size = $('[data-p-size]', row).value;
+          const top = $('[data-p-top]', row).checked, extra = num($('[data-p-extra]', row).value) || 0;
+          const onlyTop = byTitle.get(name)?.tags.includes('نخب-أول-فقط');
+          return { name, key: `${row.dataset.key} (${size} مل)`, value: `${name}${top && !onlyTop ? ' (نخب أول)' : ''}${extra ? ` +${extra} د.أ` : ''}` };
+        });
+        if (!picks.length || picks.some(x => !x.name)) return toast('اختار كل عطور العرض', true);
+        cart.push({ title: offer.title, sub: picks.map(x => x.value).join('، '), variantId: offer.variants[0].id, qty: 1,
+          price: price ?? Number(offer.variants[0].price), props: picks.map(x => [x.key, x.value]) });
+      }
+      if (kind === 'custom') {
+        const title = $('[data-mo-title]', adder).value.trim();
+        if (!title || price == null) return toast('اكتب الاسم والسعر', true);
+        cart.push({ title, sub: 'منتج مخصص', qty, price, props: [] });
+      }
+      offer = null;
+      renderAdder(); renderCart();
+    }
+
+    form.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.moKind) { kind = b.dataset.moKind; offer = null; renderAdder(); }
+      if (b.matches('[data-mo-add]')) addItem();
+      if (b.dataset.moDel != null) { cart.splice(Number(b.dataset.moDel), 1); renderCart(); }
+      if (b.matches('[data-p-del]')) { const row = b.closest('[data-pick]'); row.previousElementSibling?.remove(); row.remove(); offerPrice(); }
+    });
+    form.addEventListener('input', e => {
+      const t = e.target;
+      if (t.matches('[data-mo-perfume]')) {
+        const p = byTitle.get(t.value.trim()), sel = $('[data-mo-variant]', adder);
+        sel.disabled = !p;
+        sel.innerHTML = p ? p.variants.map(v => `<option value="${esc(v.id)}">${esc(v.title)} · ${money(v.price)}</option>`).join('') : '<option>اختار العطر أول</option>';
+        if (p) $('[data-mo-price]', adder).value = +Number(p.variants[0].price).toFixed(2);
+      }
+      if (t.matches('[data-p-extra]')) offerPrice();
+      if (t.matches('[name="fee"], [name="discount"]')) renderCart();
+    });
+    form.addEventListener('change', e => {
+      const t = e.target;
+      if (t.matches('[data-mo-offer]')) pickOffer(t.value);
+      if (t.matches('[data-mo-variant]')) {
+        const v = byTitle.get($('[data-mo-perfume]', adder).value.trim())?.variants.find(x => x.id === t.value);
+        if (v) $('[data-mo-price]', adder).value = +Number(v.price).toFixed(2);
+      }
+    });
+    renderAdder(); renderCart();
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = f.name.value.trim().replace(/\s+/g, ' '), phone = waPhone(f.phone.value), alt = f.alt.value.trim();
+      if (name.length < 2) return toast('اكتب اسم الزبون', true);
+      if (!/^9627[789]\d{7}$/.test(phone)) return toast('رقم الهاتف لازم يكون رقم أردني مثل 079xxxxxxx', true);
+      if (!f.gov.value) return toast('اختار المحافظة', true);
+      const area = areaOf();
+      if (f.area.value.trim() && !area) return toast('اختار المنطقة من القائمة اللي بتطلع وإنت بتكتب', true);
+      if (!cart.length) return toast('أضف عطر أو عرض للطلب', true);
+      const confirmed = f.status.value === 'confirmed', fee = num(f.fee.value) || 0, discount = num(f.discount.value) || 0;
+      const [first, ...rest] = name.split(' '), last = rest.join(' ') || '-';
+      const address = { firstName: first, lastName: last, phone: '+' + phone, countryCode: 'JO', city: f.gov.value,
+        address1: area?.[0] || f.area.value.trim() || f.gov.value, address2: f.address2.value.trim() };
+      const amount = n => ({ shopMoney: { amount: String(+Number(n).toFixed(2)), currencyCode: 'JOD' } });
+      const order = {
+        customer: { toUpsert: { firstName: first, lastName: last, phone: '+' + phone } },
+        currency: 'JOD', phone: '+' + phone, note: f.note.value.trim(), financialStatus: 'PENDING',
+        tags: [MANUAL_TAG, ...(confirmed ? [TAG_CONFIRMED] : [])],
+        shippingAddress: address, billingAddress: address,
+        lineItems: cart.map(l => ({ ...(l.variantId ? { variantId: l.variantId } : { title: l.title }), quantity: l.qty, requiresShipping: true, priceSet: amount(l.price),
+          properties: l.props.map(([k, v]) => ({ name: k, value: v })) })),
+        shippingLines: [{ title: fee ? 'توصيل' : 'توصيل مجاني', priceSet: amount(fee) }],
+        ...(discount ? { discountCode: { itemFixedDiscountCode: { code: 'خصم يدوي', amountSet: amount(discount) } } } : {}),
+        // The area ids let «رفع لشركة التوصيل» go without guessing, as for cart-page orders.
+        customAttributes: [
+          ...(area ? [{ key: 'منطقة التوصيل', value: `${f.gov.value} / ${area[0]}` }, { key: '_delivery_city_id', value: String(area[1]) },
+            { key: '_delivery_village_id', value: String(area[2]) }] : []),
+          ...(alt ? [{ key: 'رقم بديل', value: alt }] : []), ...(f.internal.value.trim() ? [{ key: 'ملاحظة داخلية', value: f.internal.value.trim() }] : [])
+        ]
+      };
+      const btn = $('[data-save]', dlg), wantWa = f.wa.checked, wantSheet = confirmed && !!f.sheet?.checked, wantShip = f.ship.checked;
+      btn.disabled = true; btn.textContent = 'جاري تثبيت الطلب…';
+      let o;
+      try { o = await api.createOrder(order); }
+      catch (err) { console.error(err); btn.disabled = false; renderCart(); return toast('ما انحفظ الطلب: ' + err.message, true); }
+      S.orders.unshift(o);
+      dlg.close();
+      const done = [], failed = [];
+      if (wantSheet) { try { await postToSheet(o); done.push('انرفع على الشيت'); } catch (err) { failed.push('الشيت: ' + err.message); } }
+      if (wantWa) {
+        const err = await sendText(o, fillMessage(confirmed ? st.confirmed : st.new_order, o));
+        if (err) failed.push(`الرسالة ما انبعتت (${err})`);
+        else {
+          done.push('انبعتت الرسالة');
+          if (!confirmed) { try { await api.addTags(o, [TAG_SENT]); o.tags.push(TAG_SENT); } catch (e2) { console.error(e2); } }
+        }
+      }
+      toast([`انضاف الطلب ${o.name} ✓`, ...done, ...failed].join(' · '), failed.length > 0);
+      S.orderFilter = 'all';
+      render();
+      if (wantShip) shipAction(o, 'create', document.createElement('div'));
     });
   }
 
@@ -2319,6 +2594,7 @@ function reply(o) {
     if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
+    if (el.matches('[data-onew]')) return openManualOrder();
     if (el.matches('[data-copy]')) return copyText(el.dataset.copy);
     if (['vfilter', 'vreload', 'vmore', 'visit', 'vback', 'vstatus', 'vsavenote', 'vsend'].some(k => k in el.dataset)) return visitAction(el);
     if (el.dataset.ship) {
