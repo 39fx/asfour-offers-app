@@ -1285,10 +1285,23 @@
     }
   }
 
+  // Orders the WhatsApp bot confirmed (the customer answered yes to the order message) come tagged مؤكد and
+  // TAG_SHEET; their sheet row is built from the store's products here, so post it now and drop the marker.
+  const TAG_SHEET = 'بانتظار-الشيت';
+  async function syncBotConfirmed() {
+    if (DEMO || !S.products) return;
+    for (const o of S.orders.filter(o => o.tags.includes(TAG_SHEET))) {
+      try {
+        if (S.orderSettings.sheet_url) await postToSheet(o);
+        await api.removeTags(o, [TAG_SHEET]); o.tags = o.tags.filter(t => t !== TAG_SHEET);
+      } catch (e) { console.error(e); toast(`الطلب ${o.name} تأكد من الواتساب بس ما انرفع على الشيت: ${e.message}`, true); }
+    }
+  }
+
   async function loadOrders() {
     if (S.ordersLoading) return;
     S.ordersLoading = true;
-    try { await api.loadOrders(); await syncAutoSent(); }
+    try { await api.loadOrders(); await syncAutoSent(); await syncBotConfirmed(); }
     catch (e) {
       console.error(e);
       S.orders = null;
@@ -1736,7 +1749,7 @@
       const done = [], failed = [];
       if (wantSheet) { try { await postToSheet(o); done.push('انرفع على الشيت'); } catch (err) { failed.push('الشيت: ' + err.message); } }
       if (wantWa) {
-        const err = await sendText(o, fillMessage(confirmed ? st.confirmed : st.new_order, o));
+        const err = await sendText(o, fillMessage(confirmed ? st.confirmed : st.new_order, o), !confirmed);
         if (err) failed.push(`الرسالة ما انبعتت (${err})`);
         else {
           done.push('انبعتت الرسالة');
@@ -2100,12 +2113,13 @@
   }
 
   // WhatsApp from the shop's number via the orders worker; returns null when sent, else the reason.
-  async function sendText(o, text) {
+  // awaitReply: the text asks the customer to confirm, so the worker's bot reads their answer.
+  async function sendText(o, text, awaitReply = false) {
     if (DEMO) return null;
     const st = S.orderSettings;
     try {
       const r = await fetch(`${st.worker_url}/send`, { method: 'POST', headers: { 'X-Asfour-Key': st.worker_key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: o.phone, text }) }).then(x => x.json());
+        body: JSON.stringify({ phone: o.phone, text, ...(awaitReply ? { order: o.id.split('/').pop(), name: o.name } : {}) }) }).then(x => x.json());
       return r.ok ? null : r.error || 'خطأ';
     } catch (e) { return e.message; }
   }
