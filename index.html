@@ -2162,6 +2162,24 @@ function doPost(e) {
       sh.getRange(row, 15).setValue(d.status);
       return reply({ ok: true, row: row });
     }
+    // سيرفر الطلبات (كل ليلة): السطور اللي عليها صح بـ «عمران سواه» ولسا مش مرفوعة بـ «انرفع على الموقع».
+    if (d.action === 'omran') {
+      const all = props.getProperties(), byRow = {};
+      Object.keys(all).forEach(k => { if (k.indexOf('order ') === 0) byRow[all[k]] = k.slice(6); });
+      const last = sh.getLastRow();
+      const values = last < FIRST_ROW ? [] : sh.getRange(FIRST_ROW, 1, last - FIRST_ROW + 1, 10).getValues();
+      const rows = [];
+      values.forEach((v, i) => {
+        if (v[1] === true && v[3] !== true && String(v[4]).trim()) rows.push({ row: FIRST_ROW + i, order: byRow[FIRST_ROW + i] || '',
+          source: String(v[0]), name: String(v[4]).trim(), details: String(v[6]), phone: String(v[9]) });
+      });
+      return reply({ ok: true, rows: rows });
+    }
+    // انرفع على شركة التوصيل: صح بعمود «انرفع على الموقع».
+    if (d.action === 'uploaded') {
+      sh.getRange(Number(d.row), 4).setValue(true);
+      return reply({ ok: true });
+    }
     if (props.getProperty('order ' + d.order)) return reply({ ok: true, duplicate: true });
     const names = sh.getRange(FIRST_ROW, 5, sh.getMaxRows() - FIRST_ROW + 1, 1).getValues();
     let used = names.length;
