@@ -121,6 +121,7 @@
     .order.is-cancelled { background: var(--danger-soft); border-inline-start: 4px solid var(--danger); }
     .order.is-cancelled .order__items { background: #fff6f5; }
     .order__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .order__src { color: #7c4a03; background: #fff7e6; border-radius: 999px; padding: 2px 10px; display: inline-block; margin-top: 2px; }
     .order__items { white-space: pre-line; font-size: 13px; background: #fafbf9; border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
     .order__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
     .code { direction: ltr; text-align: left; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre; overflow: auto; max-height: 220px; }
@@ -1402,6 +1403,7 @@
         <span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
       ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
+      ${o.attrs.some(a => a.key === 'مصدر الزبون') ? `<div class="small order__src">📍 ${esc(o.attrs.find(a => a.key === 'مصدر الزبون').value)}</div>` : ''}
       ${open ? orderDetail(o) : `<div class="order__items">${esc(itemsText(o, false))}</div>`}
       <div class="order__foot"><b>${jod(o.total)}</b><span class="actions">
         ${ship}<button class="btn btn--sm" data-otoggle aria-expanded="${open}">${open ? '▲ إخفاء التفاصيل' : '📋 التفاصيل'}</button>${buttons}</span></div>
