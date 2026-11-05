@@ -276,6 +276,14 @@
     .cus__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
     .cus__wa { margin-inline-start: auto; }
     .cus__nums { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+    .cus__toggle { align-self: flex-start; margin-top: 4px; }
+    .cus__orders { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+    .cus-o { background: #fffaf0; border: 1px solid #f3e8cc; border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .cus-o.is-cancelled { opacity: .65; }
+    .cus-o__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+    .cus-o__total { margin-inline-start: auto; }
+    .cus-o__line b { font-size: 13px; }
+    .cus-o__line ul { margin: 2px 0 0; padding-inline-start: 18px; font-size: 13px; }
     .oedit__h { font-size: 15px; margin: 16px 0 8px; }
     .oedit__h:first-of-type { margin-top: 0; }
     .oedit__line { display: flex; flex-direction: column; gap: 6px; background: #fffaf0; border: 1px solid #f3e8cc; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
@@ -426,7 +434,7 @@
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
               priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
               orders: null, ordersLoading: false, orderFilter: 'all', orderSettings: null, shopId: null, openOrders: new Set(), ship: {}, shipStatus: {},
-              customers: { list: null, loading: false, filter: 'all', q: '' },
+              customers: { list: null, loading: false, filter: 'all', q: '', open: new Set() },
               visits: { filter: 'incomplete', q: '', from: '', to: '', empty: false, list: null, stats: null, more: false, sel: null, detail: null, loading: false } };
 
   const $ = (s, r = document) => r.querySelector(s);
@@ -1866,7 +1874,9 @@
     C.loading = true;
     try {
       C.list = DEMO ? [{ phone: '0791234567', name: 'محمد عبابنة', gov: 'عمان', area: 'خلدا', address2: 'قرب دوار الدلة', source: 'order', has_account: 1, created: Date.now() - 9e8,
-          updated: Date.now() - 2e8, last_login: Date.now() - 1e8, orders: 3, cancelled: 0, spent: 84, last_order: { name: '#1041', at: Date.now() - 2e8 } },
+          updated: Date.now() - 2e8, last_login: Date.now() - 1e8, orders: 3, cancelled: 0, spent: 84, last_order: { name: '#1041', at: Date.now() - 2e8 },
+          order_list: [{ name: '#1041', date: new Date(Date.now() - 2e8).toISOString(), status: 'تم التسليم', total: 32, address: 'عمان / خلدا / قرب دوار الدلة', note: '',
+            lines: [{ title: 'الأكثر طلباً | 3 عطور حجم 110مل + عطر 50مل مجاناً', qty: 1, price: 32, picks: ['سوفاج ديور · 110 مل', 'ليتون دي مارلي · 110 مل', 'خمرة قهوة · 110 مل', 'يارا لطافة · 50 مل (هدية)'] }] }] },
         { phone: '0785550000', name: 'لينا الطراونة', gov: 'إربد', area: 'شارع الجامعة', source: 'account', has_account: 1, created: Date.now() - 3e8, updated: Date.now() - 3e8,
           orders: 0, cancelled: 0, spent: 0, last_order: null }]
         : (await workerGet('/customers')).customers;
@@ -1874,6 +1884,7 @@
     C.loading = false;
     if (S.tab === 'customers') render();
   }
+  const CUS_STATUS = { 'تم التسليم': 'badge--ok', 'مؤكد وقيد التجهيز': 'badge--ok', 'قيد التوصيل': 'badge--ok', 'ملغي': 'badge--out', 'بانتظار التأكيد': 'badge--hidden' };
   function renderCustomers() {
     const C = S.customers;
     if (!C.list) { app.innerHTML = '<div class="loading">جاري تحميل الزبائن…</div>'; loadCustomers(); return; }
@@ -1903,6 +1914,16 @@
               ${c.cancelled ? `<span class="muted">${c.cancelled} ملغي</span>` : ''}
               <span class="muted">آخر طلب: ${c.last_order ? `${esc(c.last_order.name)} · ${day(c.last_order.at)}` : 'ما طلب لسا'}</span>
               ${c.last_login ? `<span class="muted">آخر دخول: ${day(c.last_login)}</span>` : ''}</div>
+            ${c.order_list?.length ? `<button class="btn btn--sm cus__toggle" data-ctoggle="${esc(c.phone)}" aria-expanded="${C.open.has(c.phone)}">
+              ${C.open.has(c.phone) ? '▲ إخفاء الطلبات' : `📋 الطلبات (${c.order_list.length})`}</button>` : ''}
+            ${C.open.has(c.phone) ? `<div class="cus__orders">${c.order_list.map(o => `<div class="cus-o${o.status === 'ملغي' ? ' is-cancelled' : ''}">
+              <div class="cus-o__head"><b>${esc(o.name)}</b><span class="badge ${CUS_STATUS[o.status] || 'badge--draft'}">${esc(o.status)}</span>
+                <span class="muted small">${esc(day(Date.parse(o.date)))}</span><b class="cus-o__total">${plainJod(o.total)}</b></div>
+              ${o.lines.map(l => `<div class="cus-o__line"><b>${esc(l.title)}${l.qty > 1 ? ` × ${l.qty}` : ''}</b>
+                ${l.picks.length ? `<ul>${l.picks.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}</div>`).join('')}
+              ${o.address ? `<div class="muted small">📍 ${esc(o.address)}</div>` : ''}
+              ${o.note ? `<div class="muted small">📝 ${esc(o.note)}</div>` : ''}
+            </div>`).join('')}</div>` : ''}
           </div>`).join('') || '<div class="empty">ما في زبائن هون</div>'}
         </div>
       </div>`;
@@ -2695,6 +2716,7 @@ function reply(o) {
     if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
     if (el.dataset.cfilter) { S.customers.filter = el.dataset.cfilter; return render(); }
     if (el.matches('[data-creload]')) { S.customers.list = null; return render(); }
+    if (el.dataset.ctoggle) { const o = S.customers.open, k = el.dataset.ctoggle; o.has(k) ? o.delete(k) : o.add(k); return render(); }
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
     if (el.matches('[data-onew]')) return openManualOrder();
