@@ -6,7 +6,7 @@
   <!-- App Bridge must load first; the api key is the app's public client id. -->
   <meta name="shopify-api-key" content="bb93b709eabcc01ea192be3cc5ab86ae">
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
-  <title>مدير العروض</title>
+  <title>الادمن</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -68,6 +68,7 @@
     .badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
     .badge--ok { background: var(--primary-soft); color: var(--primary); }
     .badge--out { background: var(--danger-soft); color: var(--danger); }
+    .badge--gift { background: #fde9b0; color: #7a4f00; }
     .badge--hidden { background: var(--warn-soft); color: var(--warn); }
     .badge--draft { background: var(--info-soft); color: #3730a3; }
     .actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
@@ -277,6 +278,12 @@
     .cus__wa { margin-inline-start: auto; }
     .cus__nums { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
     .cus__toggle { align-self: flex-start; margin-top: 4px; }
+    .cus__gift { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; }
+    .cus__gift b { color: #7a4f00; }
+    .cus__dots { display: inline-flex; gap: 4px; }
+    .cus__dots i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800;
+      border: 1.5px solid #e6cf8f; color: #b08a2e; background: #fff; }
+    .cus__dots i.is-done { background: #c8a24a; border-color: #c8a24a; color: #fff; }
     .cus__orders { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
     .cus-o { background: #fffaf0; border: 1px solid #f3e8cc; border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
     .cus-o.is-cancelled { opacity: .65; }
@@ -1140,6 +1147,8 @@
     const total = edit.total != null ? Number(edit.total) : Number(n.totalPriceSet.shopMoney.amount);
     return {
       id: n.id, name: n.name, createdAt: n.createdAt, cancelled: !!n.cancelledAt, tags: n.tags || [], note: n.note || '', attrs, edit, raw: n,
+      // Which order of this customer it is (cart-page orders; the third gets the free 50 ml).
+      position: Number(attrs.find(a => a.key === '_ترتيب_الطلب')?.value) || 0,
       // Orders from the cart page carry the Direct Delivery area the customer picked.
       deliveryVillage: Number(attrs.find(a => a.key === '_delivery_village_id')?.value) || 0,
       total, shipping, subtotal: edit.total != null ? total - shipping : Number(n.subtotalPriceSet?.shopMoney.amount ?? total - shipping),
@@ -1155,7 +1164,7 @@
         const own = edit.picks?.[index] ? [...li.customAttributes.filter(x => !isSlot(x)), ...edit.picks[index].map(([key, value]) => ({ key, value }))] : li.customAttributes;
         return { ...li, customAttributes: own, index };
       }).map(li => ({ index: li.index, title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount), image: li.image?.url || '',
-        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور'].includes(x.key))
+        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور', 'هدية الطلب الثالث'].includes(x.key))
           .map(x => {
             const m = x.key.match(/\((110|50) مل\)/), extra = x.value.match(EXTRA_RE);
             const name = x.value.replace(EXTRA_RE, '');
@@ -1186,6 +1195,7 @@
     const b = wa ? '*' : '';
     // The top-grade difference line is internal; the total already includes it.
     return o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض')).map(li => {
+      if (isGift(li)) return `• ${li.title} 50مل — ${b}هدية مجانية 🎁${b}`;
       // A single perfume (no offer slots) carries its size and grade in the variant: "110ML / نخب أول".
       const size = !li.props.length && li.variant.match(/(110|50)/);
       const name = size ? `${li.title}${li.variant.includes('نخب أول') ? ' (نخب أول)' : ''} ${size[1]}مل` : li.title;
@@ -1231,13 +1241,17 @@
 
   // Line items that are real products (the top-grade difference line is internal; the total already includes it).
   const orderLines = o => o.items.filter(li => !li.attrs.some(a => a.key === 'للعرض'));
+  // The free 50 ml that comes with every third order (added by the orders worker at checkout).
+  const isGift = li => li.attrs.some(a => a.key === '_هدية_الولاء');
+  const TAG_GIFT = 'هدية-الولاء', TAG_GIFT_DUE = 'هدية-مستحقة';
   const slotAttrs = li => li.attrs.filter(isSlot);
   // One entry per perfume: the offer's picks, or a single perfume once per unit (its grade sits in the variant).
   function itemEntries(li, byTitle) {
     const picks = slotAttrs(li);
     const raw = picks.length
       ? picks.map(a => ({ name: a.value.replace(EXTRA_RE, ''), size: a.key.includes('110') ? '110' : '50', gift: a.key.includes('هدية'), extra: Number(a.value.match(EXTRA_RE)?.[1] || 0) }))
-      : Array.from({ length: li.qty }, () => ({ name: li.title + (li.variant.includes('نخب أول') ? ' (نخب أول)' : ''), size: /110/.test(li.variant) ? '110' : '50', gift: false, extra: 0 }));
+      : Array.from({ length: li.qty }, () => ({ name: li.title + (li.variant.includes('نخب أول') ? ' (نخب أول)' : ''), size: isGift(li) || !/110/.test(li.variant) ? '50' : '110',
+        gift: isGift(li), extra: 0 }));
     return raw.map(e => {
       const base = e.name.replace(/\s*\((نخب أول|صنف عالي)\)\s*$/, ''), product = byTitle.get(base);
       // Top-grade-only perfumes at the normal price no longer carry the label in their name.
@@ -1368,7 +1382,11 @@
       : o.cancelled || st === 'cancelled' ? '' : '<button class="btn btn--sm btn--ship" data-ship="create">🚚 رفع لشركة التوصيل</button>';
     const open = S.openOrders.has(o.id);
     return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}${open ? ' is-open' : ''}" data-order-id="${o.id}">
-      <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span><span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
+      <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span>
+        ${o.position ? `<span class="badge badge--hidden">طلبه رقم ${o.position}</span>` : ''}
+        ${o.tags.includes(TAG_GIFT) ? '<span class="badge badge--gift">🎁 هدية الطلب الثالث</span>' : ''}
+        ${o.tags.includes(TAG_GIFT_DUE) ? '<span class="badge badge--gift">🎁 إله هدية 50مل، اسأله شو بدّه</span>' : ''}
+        <span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
       ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
       ${open ? orderDetail(o) : `<div class="order__items">${esc(itemsText(o, false))}</div>`}
@@ -1874,7 +1892,7 @@
     C.loading = true;
     try {
       C.list = DEMO ? [{ phone: '0791234567', name: 'محمد عبابنة', gov: 'عمان', area: 'خلدا', address2: 'قرب دوار الدلة', source: 'order', has_account: 1, created: Date.now() - 9e8,
-          updated: Date.now() - 2e8, last_login: Date.now() - 1e8, orders: 3, cancelled: 0, spent: 84, last_order: { name: '#1041', at: Date.now() - 2e8 },
+          updated: Date.now() - 2e8, last_login: Date.now() - 1e8, orders: 3, cancelled: 0, spent: 84, last_order: { name: '#1041', at: Date.now() - 2e8 }, loyalty: { done: 5, every: 3, step: 2, next_is_gift: true }, gifts: ['#1030'],
           order_list: [{ name: '#1041', date: new Date(Date.now() - 2e8).toISOString(), status: 'تم التسليم', total: 32, address: 'عمان / خلدا / قرب دوار الدلة', note: '',
             lines: [{ title: 'الأكثر طلباً | 3 عطور حجم 110مل + عطر 50مل مجاناً', qty: 1, price: 32, picks: ['سوفاج ديور · 110 مل', 'ليتون دي مارلي · 110 مل', 'خمرة قهوة · 110 مل', 'يارا لطافة · 50 مل (هدية)'] }] }] },
         { phone: '0785550000', name: 'لينا الطراونة', gov: 'إربد', area: 'شارع الجامعة', source: 'account', has_account: 1, created: Date.now() - 3e8, updated: Date.now() - 3e8,
@@ -1889,12 +1907,13 @@
     const C = S.customers;
     if (!C.list) { app.innerHTML = '<div class="loading">جاري تحميل الزبائن…</div>'; loadCustomers(); return; }
     const q = C.q.trim(), all = C.list;
-    const list = all.filter(c => (C.filter === 'all' || (C.filter === 'account' ? c.has_account : C.filter === 'repeat' ? c.orders > 1 : !c.has_account))
+    const keep = { all: () => true, account: c => c.has_account, guest: c => !c.has_account, repeat: c => c.orders > 1, gift: c => c.loyalty?.next_is_gift };
+    const list = all.filter(c => keep[C.filter](c)
       && (!q || [c.name, c.phone, c.gov, c.area].some(v => String(v || '').includes(q))));
     const day = ms => (ms ? new Date(ms).toLocaleDateString('ar-JO', { timeZone: 'Asia/Amman', day: 'numeric', month: 'numeric', year: '2-digit' }) : '—');
     const count = f => all.filter(f).length;
     const filters = [['all', 'الكل', all.length], ['account', 'عندهم حساب', count(c => c.has_account)], ['guest', 'بدون حساب', count(c => !c.has_account)],
-      ['repeat', 'طلبوا أكثر من مرة', count(c => c.orders > 1)]];
+      ['repeat', 'طلبوا أكثر من مرة', count(c => c.orders > 1)], ['gift', '🎁 طلبهم الجاي هدية', count(c => c.loyalty?.next_is_gift)]];
     app.innerHTML = `
       <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">
         ${filters.map(([k, l, n]) => `<button class="stat" data-cfilter="${k}" aria-pressed="${C.filter === k}"><b>${n}</b>${l}</button>`).join('')}
@@ -1914,6 +1933,10 @@
               ${c.cancelled ? `<span class="muted">${c.cancelled} ملغي</span>` : ''}
               <span class="muted">آخر طلب: ${c.last_order ? `${esc(c.last_order.name)} · ${day(c.last_order.at)}` : 'ما طلب لسا'}</span>
               ${c.last_login ? `<span class="muted">آخر دخول: ${day(c.last_login)}</span>` : ''}</div>
+            ${c.loyalty ? `<div class="cus__gift"><span class="cus__dots">${Array.from({ length: c.loyalty.every }, (_, i) =>
+                `<i class="${i < c.loyalty.step ? 'is-done' : ''}${i === c.loyalty.every - 1 ? ' is-gift' : ''}">${i === c.loyalty.every - 1 ? '🎁' : i + 1}</i>`).join('')}</span>
+              <b>${c.loyalty.next_is_gift ? 'طلبه الجاي إله عطر 50مل مجاناً' : `${c.loyalty.step} من ${c.loyalty.every - 1} للهدية`}</b>
+              ${c.gifts?.length ? `<span class="muted">استلم ${c.gifts.length === 1 ? 'هدية' : `${c.gifts.length} هدايا`}: ${esc(c.gifts.join('، '))}</span>` : ''}</div>` : ''}
             ${c.order_list?.length ? `<button class="btn btn--sm cus__toggle" data-ctoggle="${esc(c.phone)}" aria-expanded="${C.open.has(c.phone)}">
               ${C.open.has(c.phone) ? '▲ إخفاء الطلبات' : `📋 الطلبات (${c.order_list.length})`}</button>` : ''}
             ${C.open.has(c.phone) ? `<div class="cus__orders">${c.order_list.map(o => `<div class="cus-o${o.status === 'ملغي' ? ' is-cancelled' : ''}">
