@@ -270,6 +270,12 @@
     .odet__pick { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #f3e8cc; border-radius: 10px; padding: 7px 9px; }
     .odet__pick img, .odet__noimg { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex: none; background: #f1eee6; }
     .odet__pick b { font-size: 13px; }
+    .cus-list { display: flex; flex-direction: column; }
+    .cus { display: flex; flex-direction: column; gap: 4px; padding: 12px 4px; border-top: 1px solid var(--line); }
+    .cus:first-child { border-top: 0; }
+    .cus__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+    .cus__wa { margin-inline-start: auto; }
+    .cus__nums { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
     .oedit__h { font-size: 15px; margin: 16px 0 8px; }
     .oedit__h:first-of-type { margin-top: 0; }
     .oedit__line { display: flex; flex-direction: column; gap: 6px; background: #fffaf0; border: 1px solid #f3e8cc; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
@@ -385,6 +391,7 @@
     </div>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" data-tab="orders" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>الطلبات</button>
+      <button class="tab" role="tab" data-tab="customers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-1.7-5.2-4.5-6"/></svg>الزبائن</button>
       <button class="tab" role="tab" data-tab="visits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>السلال</button>
       <button class="tab" role="tab" data-tab="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="3.5" rx="1"/><path d="M10.5 5.5v3M13.5 5.5v3"/><rect x="5" y="8.5" width="14" height="13.5" rx="3.5"/></svg>العطور</button>
       <button class="tab" role="tab" data-tab="preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>معاينة ترتيب الزبون</button>
@@ -419,6 +426,7 @@
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
               priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
               orders: null, ordersLoading: false, orderFilter: 'all', orderSettings: null, shopId: null, openOrders: new Set(), ship: {}, shipStatus: {},
+              customers: { list: null, loading: false, filter: 'all', q: '' },
               visits: { filter: 'incomplete', q: '', from: '', to: '', empty: false, list: null, stats: null, more: false, sel: null, detail: null, loading: false } };
 
   const $ = (s, r = document) => r.querySelector(s);
@@ -793,9 +801,9 @@
   function render() {
     document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === S.tab));
     // The orders tab loads on its own; the perfume tabs wait for the catalogue (or its saved copy).
-    if (S.tab !== 'orders' && S.tab !== 'visits' && !S.productsReady) { app.innerHTML = '<div class="loading">جاري تحميل العطور…</div>'; return; }
+    if (!['orders', 'visits', 'customers'].includes(S.tab) && !S.productsReady) { app.innerHTML = '<div class="loading">جاري تحميل العطور…</div>'; return; }
     if (S.productsReady) saveCache();
-    ({ orders: renderOrders, visits: renderVisits, list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
+    ({ orders: renderOrders, visits: renderVisits, customers: renderCustomers, list: renderList, preview: renderPreview, cats: renderCats, offers: renderOffers, archive: renderArchive })[S.tab]();
   }
 
   function statusBadges(p) {
@@ -1849,6 +1857,57 @@
     if (S.visits.sel === id) render();
   }
 
+  /* ---------------- Customers («الزبائن») ---------------- */
+  // Everyone who signed up on the site's «حسابي» page or ordered from the cart page (orders worker /customers):
+  // their saved details, how they were first seen, and their orders.
+  async function loadCustomers() {
+    const C = S.customers;
+    if (C.loading) return;
+    C.loading = true;
+    try {
+      C.list = DEMO ? [{ phone: '0791234567', name: 'محمد عبابنة', gov: 'عمان', area: 'خلدا', address2: 'قرب دوار الدلة', source: 'order', has_account: 1, created: Date.now() - 9e8,
+          updated: Date.now() - 2e8, last_login: Date.now() - 1e8, orders: 3, cancelled: 0, spent: 84, last_order: { name: '#1041', at: Date.now() - 2e8 } },
+        { phone: '0785550000', name: 'لينا الطراونة', gov: 'إربد', area: 'شارع الجامعة', source: 'account', has_account: 1, created: Date.now() - 3e8, updated: Date.now() - 3e8,
+          orders: 0, cancelled: 0, spent: 0, last_order: null }]
+        : (await workerGet('/customers')).customers;
+    } catch (e) { console.error(e); C.list = null; toast('ما قدرنا نجيب الزبائن: ' + e.message, true); }
+    C.loading = false;
+    if (S.tab === 'customers') render();
+  }
+  function renderCustomers() {
+    const C = S.customers;
+    if (!C.list) { app.innerHTML = '<div class="loading">جاري تحميل الزبائن…</div>'; loadCustomers(); return; }
+    const q = C.q.trim(), all = C.list;
+    const list = all.filter(c => (C.filter === 'all' || (C.filter === 'account' ? c.has_account : C.filter === 'repeat' ? c.orders > 1 : !c.has_account))
+      && (!q || [c.name, c.phone, c.gov, c.area].some(v => String(v || '').includes(q))));
+    const day = ms => (ms ? new Date(ms).toLocaleDateString('ar-JO', { timeZone: 'Asia/Amman', day: 'numeric', month: 'numeric', year: '2-digit' }) : '—');
+    const count = f => all.filter(f).length;
+    const filters = [['all', 'الكل', all.length], ['account', 'عندهم حساب', count(c => c.has_account)], ['guest', 'بدون حساب', count(c => !c.has_account)],
+      ['repeat', 'طلبوا أكثر من مرة', count(c => c.orders > 1)]];
+    app.innerHTML = `
+      <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">
+        ${filters.map(([k, l, n]) => `<button class="stat" data-cfilter="${k}" aria-pressed="${C.filter === k}"><b>${n}</b>${l}</button>`).join('')}
+      </div>
+      <div class="card">
+        <div class="toolbar"><input class="input grow" type="search" placeholder="ابحث بالاسم، الرقم، المنطقة…" value="${esc(C.q)}" data-cq>
+          <button class="btn btn--sm" data-creload>🔄 تحديث</button></div>
+        <div class="cus-list">
+          ${list.map(c => `<div class="cus">
+            <div class="cus__head"><b>${esc(c.name || 'بدون اسم')}</b>
+              <span class="badge ${c.has_account ? 'badge--ok' : 'badge--hidden'}">${c.has_account ? 'عنده حساب' : 'بدون حساب'}</span>
+              <span class="muted small">${c.source === 'account' ? 'سجّل بنفسه' : 'انضاف من أول طلب'} · ${day(c.created)}</span>
+              <a class="btn btn--sm cus__wa" href="https://api.whatsapp.com/send?phone=${waPhone(c.phone)}" target="_blank" rel="noopener">واتساب</a></div>
+            <div class="small"><span dir="ltr">${esc(c.phone)}</span>${c.phone2 ? ` · بديل <span dir="ltr">${esc(c.phone2)}</span>` : ''}</div>
+            <div class="muted small">${esc([c.gov, c.area, c.address2].filter(Boolean).join(' / ') || 'ما سجّل عنوان')}</div>
+            <div class="cus__nums"><span><b>${c.orders}</b> طلب</span><span><b>${plainJod(c.spent)}</b> مجموع</span>
+              ${c.cancelled ? `<span class="muted">${c.cancelled} ملغي</span>` : ''}
+              <span class="muted">آخر طلب: ${c.last_order ? `${esc(c.last_order.name)} · ${day(c.last_order.at)}` : 'ما طلب لسا'}</span>
+              ${c.last_login ? `<span class="muted">آخر دخول: ${day(c.last_login)}</span>` : ''}</div>
+          </div>`).join('') || '<div class="empty">ما في زبائن هون</div>'}
+        </div>
+      </div>`;
+  }
+
   function renderVisits() {
     const V = S.visits;
     if (!V.list) { app.innerHTML = '<div class="loading">جاري تحميل السلال…</div>'; loadVisits(); return; }
@@ -2595,6 +2654,12 @@ function reply(o) {
       render();
       const q = $('[data-q]'); q.focus(); q.setSelectionRange(pos, pos);
     }
+    if (e.target.matches('[data-cq]')) {
+      S.customers.q = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const q = $('[data-cq]'); q.focus(); q.setSelectionRange(pos, pos);
+    }
     // Visits search asks the server, so wait for a pause in typing.
     if (e.target.matches('[data-vq]')) {
       S.visits.q = e.target.value.trim();
@@ -2628,6 +2693,8 @@ function reply(o) {
     const el = e.target.closest('button'); if (!el) return;
     const row = el.closest('[data-id]'), p = row && find(row.dataset.id);
     if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
+    if (el.dataset.cfilter) { S.customers.filter = el.dataset.cfilter; return render(); }
+    if (el.matches('[data-creload]')) { S.customers.list = null; return render(); }
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
     if (el.matches('[data-onew]')) return openManualOrder();
