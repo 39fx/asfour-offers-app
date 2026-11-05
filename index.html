@@ -446,7 +446,7 @@
   const S = { products: [], collections: [], offers: [], locationId: null, onlinePub: null, optionName: 'Size',
               priorityType: 'number_integer', tab: 'orders', filter: 'all', q: '', cat: '', sort: 'priority', selected: new Set(), productsReady: false,
               orders: null, ordersLoading: false, orderFilter: 'all', orderSettings: null, shopId: null, openOrders: new Set(), ship: {}, shipStatus: {},
-              customers: { list: null, loading: false, filter: 'all', q: '', open: new Set() },
+              customers: { list: null, loading: false, filter: 'all', q: '', open: new Set(), show: 100 },
               visits: { filter: 'incomplete', q: '', from: '', to: '', empty: false, list: null, stats: null, more: false, sel: null, detail: null, loading: false } };
 
   const $ = (s, r = document) => r.querySelector(s);
@@ -1920,13 +1920,17 @@
     const C = S.customers;
     if (!C.list) { app.innerHTML = '<div class="loading">جاري تحميل الزبائن…</div>'; loadCustomers(); return; }
     const q = C.q.trim(), all = C.list;
-    const keep = { all: () => true, account: c => c.has_account, guest: c => !c.has_account, repeat: c => c.orders > 1, gift: c => c.loyalty?.next_is_gift };
-    const list = all.filter(c => keep[C.filter](c)
-      && (!q || [c.name, c.phone, c.gov, c.area].some(v => String(v || '').includes(q))));
+    // Orders on the site plus the ones before it (the old sheet's delivered orders, or typed by hand).
+    const total = c => (c.orders || 0) + (c.prior_orders || 0);
+    const keep = { all: () => true, account: c => c.has_account, guest: c => !c.has_account, repeat: c => total(c) > 1, gift: c => c.loyalty?.next_is_gift };
+    const found = all.filter(c => keep[C.filter](c)
+      && (!q || [c.name, c.phone, c.gov, c.area, c.address2].some(v => String(v || '').includes(q))));
+    // 1,300+ customers since the sheet import: draw them a hundred at a time.
+    const list = found.slice(0, C.show);
     const day = ms => (ms ? new Date(ms).toLocaleDateString('ar-JO', { timeZone: 'Asia/Amman', day: 'numeric', month: 'numeric', year: '2-digit' }) : '—');
     const count = f => all.filter(f).length;
     const filters = [['all', 'الكل', all.length], ['account', 'عندهم حساب', count(c => c.has_account)], ['guest', 'بدون حساب', count(c => !c.has_account)],
-      ['repeat', 'طلبوا أكثر من مرة', count(c => c.orders > 1)], ['gift', '🎁 طلبهم الجاي هدية', count(c => c.loyalty?.next_is_gift)]];
+      ['repeat', 'طلبوا أكثر من مرة', count(c => total(c) > 1)], ['gift', '🎁 طلبهم الجاي هدية', count(c => c.loyalty?.next_is_gift)]];
     app.innerHTML = `
       <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">
         ${filters.map(([k, l, n]) => `<button class="stat" data-cfilter="${k}" aria-pressed="${C.filter === k}"><b>${n}</b>${l}</button>`).join('')}
@@ -1938,13 +1942,13 @@
           ${list.map(c => `<div class="cus">
             <div class="cus__head"><b>${esc(c.name || 'بدون اسم')}</b>
               <span class="badge ${c.has_account ? 'badge--ok' : 'badge--hidden'}">${c.has_account ? 'عنده حساب' : 'بدون حساب'}</span>
-              <span class="muted small">${c.source === 'account' ? 'سجّل بنفسه' : 'انضاف من أول طلب'} · ${day(c.created)}</span>
+              <span class="muted small">${c.source === 'account' ? 'سجّل بنفسه' : c.prior_orders && !c.orders ? 'من الشيت · آخر طلب' : 'انضاف من أول طلب'} · ${day(c.created)}</span>
               <a class="btn btn--sm cus__wa" href="https://api.whatsapp.com/send?phone=${waPhone(c.phone)}" target="_blank" rel="noopener">واتساب</a></div>
             <div class="small"><span dir="ltr">${esc(c.phone)}</span>${c.phone2 ? ` · بديل <span dir="ltr">${esc(c.phone2)}</span>` : ''}</div>
             <div class="muted small">${esc([c.gov, c.area, c.address2].filter(Boolean).join(' / ') || 'ما سجّل عنوان')}</div>
-            <div class="cus__nums"><span><b>${c.orders}</b> طلب</span><span><b>${plainJod(c.spent)}</b> مجموع</span>
+            <div class="cus__nums"><span><b>${total(c)}</b> طلب${c.prior_orders ? ` <span class="muted">(${c.prior_orders} قبل الموقع)</span>` : ''}</span><span><b>${plainJod(c.spent)}</b> مجموع</span>
               ${c.cancelled ? `<span class="muted">${c.cancelled} ملغي</span>` : ''}
-              <span class="muted">آخر طلب: ${c.last_order ? `${esc(c.last_order.name)} · ${day(c.last_order.at)}` : 'ما طلب لسا'}</span>
+              <span class="muted">آخر طلب: ${c.last_order ? `${esc(c.last_order.name)} · ${day(c.last_order.at)}` : (c.prior_orders ? 'من الشيت' : 'ما طلب لسا')}</span>
               ${c.last_login ? `<span class="muted">آخر دخول: ${day(c.last_login)}</span>` : ''}</div>
             ${c.loyalty ? `<div class="cus__gift"><span class="cus__dots">${Array.from({ length: c.loyalty.every }, (_, i) =>
                 `<i class="${i < c.loyalty.step ? 'is-done' : ''}${i === c.loyalty.every - 1 ? ' is-gift' : ''}">${i === c.loyalty.every - 1 ? '🎁' : i + 1}</i>`).join('')}</span>
@@ -1964,6 +1968,7 @@
             </div>`).join('')}</div>` : ''}
           </div>`).join('') || '<div class="empty">ما في زبائن هون</div>'}
         </div>
+        ${found.length > list.length ? `<div style="text-align:center;margin-top:12px"><button class="btn" data-cmore>عرض المزيد (${found.length - list.length} باقي)</button></div>` : ''}
       </div>`;
   }
 
@@ -2754,7 +2759,7 @@ function reply(o) {
       const q = $('[data-q]'); q.focus(); q.setSelectionRange(pos, pos);
     }
     if (e.target.matches('[data-cq]')) {
-      S.customers.q = e.target.value;
+      S.customers.q = e.target.value; S.customers.show = 100;
       const pos = e.target.selectionStart;
       render();
       const q = $('[data-cq]'); q.focus(); q.setSelectionRange(pos, pos);
@@ -2792,7 +2797,8 @@ function reply(o) {
     const el = e.target.closest('button'); if (!el) return;
     const row = el.closest('[data-id]'), p = row && find(row.dataset.id);
     if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
-    if (el.dataset.cfilter) { S.customers.filter = el.dataset.cfilter; return render(); }
+    if (el.dataset.cfilter) { S.customers.filter = el.dataset.cfilter; S.customers.show = 100; return render(); }
+    if (el.matches('[data-cmore]')) { S.customers.show += 100; return render(); }
     if (el.matches('[data-creload]')) { S.customers.list = null; return render(); }
     // Orders the customer had before the site count toward the gift (orders worker /customers/prior).
     if (el.dataset.cprior) {
