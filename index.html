@@ -280,6 +280,11 @@
     .cus__toggle { align-self: flex-start; margin-top: 4px; }
     .cus__gift { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; }
     .cus__gift b { color: #7a4f00; }
+    .cus__prior { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: auto; font-size: 12px; color: var(--muted, #6b7280); }
+    .cus__prior .input { width: 64px; padding: 4px 8px; }
+    .set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-weight: 600; }
+    .set-msg { border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+    .set-msg .set-row { margin-bottom: 6px; }
     .cus__dots { display: inline-flex; gap: 4px; }
     .cus__dots i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800;
       border: 1.5px solid #e6cf8f; color: #b08a2e; background: #fff; }
@@ -1125,9 +1130,17 @@
     sheet_url: '', secret: ''
   };
   const ORDER_STATES = { new: ['جديد', 'badge--draft'], sent: ['بانتظار رد الزبون', 'badge--hidden'], confirmed: ['مؤكد', 'badge--ok'],
-    postponed: ['مؤجل', 'badge--hidden'], delivered: ['تم التسليم', 'badge--ok'], cancelled: ['ملغي', 'badge--out'] };
+    in_delivery: ['مع المندوب', 'badge--ok'], postponed: ['مؤجل', 'badge--hidden'], delivered: ['تم التسليم', 'badge--ok'],
+    returned: ['مرتجع', 'badge--out'], failed: ['تعذر التسليم', 'badge--out'], cancelled: ['ملغي', 'badge--out'] };
   // Status after confirmation, kept as one order tag each; the value is what the sheet's «حالة الاوردر» column gets.
-  const STATUS_TAGS = { postponed: ['مؤجل', 'مؤجل'], delivered: ['تم-التسليم', 'تم التوصيل'], cancelled: ['ملغي', 'ملغي'] };
+  // The orders worker sets these too when the delivery company's status changes (settings «متابعة شركة التوصيل»).
+  const STATUS_TAGS = { in_delivery: ['مع-المندوب', 'قيد التوصيل'], postponed: ['مؤجل', 'مؤجل'], delivered: ['تم-التسليم', 'تم التوصيل'],
+    returned: ['مرتجع', 'راجع'], failed: ['تعذر-التسليم', 'تعذر التسليم'], cancelled: ['ملغي', 'ملغي'] };
+  // The delivery company's statuses that message the customer (orders worker TRACK_DEFAULTS has the default texts).
+  const TRACK_LABELS = [['in_delivery', '🚚 طلع مع المندوب', '[اسم العميل] [رقم الطلب] [المبلغ] [اسم المندوب] [رقم المندوب]'],
+    ['delivered', '✅ تم التسليم', '[اسم العميل] [رقم الطلب] [رابط حسابي]'], ['postponed', '⏳ مؤجل', '[اسم العميل] [رقم الطلب]'],
+    ['failed', '⚠️ تعذر التسليم', '[اسم العميل] [رقم الطلب]'], ['returned', '↩️ مرتجع', '[اسم العميل] [رقم الطلب]'],
+    ['cancelled', '❌ الشحنة انلغت عند الشركة', '[اسم العميل] [رقم الطلب]']];
   // What the sheet shows for a confirmed order that has no later status yet.
   const SHEET_CONFIRMED = 'قيد التوصيل';
   const ORDER_FIELDS = `id name createdAt cancelledAt tags note customAttributes { key value }
@@ -1164,7 +1177,7 @@
         const own = edit.picks?.[index] ? [...li.customAttributes.filter(x => !isSlot(x)), ...edit.picks[index].map(([key, value]) => ({ key, value }))] : li.customAttributes;
         return { ...li, customAttributes: own, index };
       }).map(li => ({ index: li.index, title: li.title, variant: li.variantTitle || '', qty: li.quantity, price: Number(li.originalUnitPriceSet.shopMoney.amount), image: li.image?.url || '',
-        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور', 'هدية الطلب الثالث'].includes(x.key))
+        attrs: li.customAttributes, props: li.customAttributes.filter(x => !x.key.startsWith('_') && !['للعرض', 'العطور', 'هدية الطلب الثالث', 'هدية مجانية'].includes(x.key))
           .map(x => {
             const m = x.key.match(/\((110|50) مل\)/), extra = x.value.match(EXTRA_RE);
             const name = x.value.replace(EXTRA_RE, '');
@@ -1352,7 +1365,7 @@
     app.innerHTML = `
       ${S.orderSettings.sheet_url ? '' : '<div class="note note--warn">لسا ما ربطت جوجل شيت. اكبس «الإعدادات» وتابع الخطوات عشان الطلبات المؤكدة تنرفع عليه.</div>'}
       <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
-        ${['all', 'new', 'sent', 'confirmed', 'postponed', 'delivered', 'cancelled'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
+        ${['all', 'new', 'sent', 'confirmed', 'in_delivery', 'postponed', 'delivered', 'failed', 'returned', 'cancelled'].map(k => `<button class="stat" data-ofilter="${k}" aria-pressed="${S.orderFilter === k}">
           <b>${k === 'all' ? S.orders.length : counts[k] || 0}</b>${k === 'all' ? 'كل الطلبات' : ORDER_STATES[k][0]}</button>`).join('')}
       </div>
       <div class="card">
@@ -1372,7 +1385,7 @@
       // A Shopify-cancelled order stays cancelled; everything else can move between the statuses, and a
       // cancelled one can go back (the customer may change their mind).
       + (o.cancelled ? '' : `<select class="input" data-ostatus style="width:auto;padding:4px 8px">
-        ${(confirmed ? ['confirmed', 'postponed', 'delivered', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
+        ${(confirmed ? ['confirmed', 'in_delivery', 'postponed', 'delivered', 'failed', 'returned', 'cancelled'] : [o.tags.includes(TAG_SENT) ? 'sent' : 'new', 'cancelled'])
           .map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${k === st ? 'الحالة: ' : ''}${ORDER_STATES[k][0]}</option>`).join('')}</select>`)
       + (st === 'cancelled' ? '' : '<button class="btn btn--sm btn--cancel" data-oact="cancel">❌ انلغى الأوردر</button>')
       + '<button class="btn btn--sm" data-oact="edit">✏️ تعديل</button><button class="btn btn--sm btn--danger" data-oact="delete">🗑️ حذف</button>';
@@ -1384,7 +1397,7 @@
     return `<div class="order${st === 'cancelled' ? ' is-cancelled' : ''}${open ? ' is-open' : ''}" data-order-id="${o.id}">
       <div class="order__head"><b>${esc(o.name)}</b><span class="badge ${cls}">${label}</span>
         ${o.position ? `<span class="badge badge--hidden">طلبه رقم ${o.position}</span>` : ''}
-        ${o.tags.includes(TAG_GIFT) ? '<span class="badge badge--gift">🎁 هدية الطلب الثالث</span>' : ''}
+        ${o.tags.includes(TAG_GIFT) ? '<span class="badge badge--gift">🎁 هدية مجانية</span>' : ''}
         ${o.tags.includes(TAG_GIFT_DUE) ? '<span class="badge badge--gift">🎁 إله هدية 50مل، اسأله شو بدّه</span>' : ''}
         <span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
@@ -1936,7 +1949,9 @@
             ${c.loyalty ? `<div class="cus__gift"><span class="cus__dots">${Array.from({ length: c.loyalty.every }, (_, i) =>
                 `<i class="${i < c.loyalty.step ? 'is-done' : ''}${i === c.loyalty.every - 1 ? ' is-gift' : ''}">${i === c.loyalty.every - 1 ? '🎁' : i + 1}</i>`).join('')}</span>
               <b>${c.loyalty.next_is_gift ? 'طلبه الجاي إله عطر 50مل مجاناً' : `${c.loyalty.step} من ${c.loyalty.every - 1} للهدية`}</b>
-              ${c.gifts?.length ? `<span class="muted">استلم ${c.gifts.length === 1 ? 'هدية' : `${c.gifts.length} هدايا`}: ${esc(c.gifts.join('، '))}</span>` : ''}</div>` : ''}
+              ${c.gifts?.length ? `<span class="muted">استلم ${c.gifts.length === 1 ? 'هدية' : `${c.gifts.length} هدايا`}: ${esc(c.gifts.join('، '))}</span>` : ''}
+              <label class="cus__prior">طلبات قبل الموقع <input class="input" type="number" min="0" max="99" value="${c.prior_orders || 0}" data-cprior-n="${esc(c.phone)}">
+                <button class="btn btn--sm" data-cprior="${esc(c.phone)}" data-name="${esc(c.name || '')}">حفظ</button></label></div>` : ''}
             ${c.order_list?.length ? `<button class="btn btn--sm cus__toggle" data-ctoggle="${esc(c.phone)}" aria-expanded="${C.open.has(c.phone)}">
               ${C.open.has(c.phone) ? '▲ إخفاء الطلبات' : `📋 الطلبات (${c.order_list.length})`}</button>` : ''}
             ${C.open.has(c.phone) ? `<div class="cus__orders">${c.order_list.map(o => `<div class="cus-o${o.status === 'ملغي' ? ' is-cancelled' : ''}">
@@ -2352,6 +2367,21 @@ function reply(o) {
           <span class="muted small">المتغيرات: ${vars}. استخدم *نص* للخط العريض بالواتساب. سطر فيه <b>---</b> بيقسم رسالة التأكيد لرسالتين بتنبعتوا ورا بعض.</span></div>
         <div class="field"><label>رسالة «تم إلغاء طلبك» (زر «انلغى الأوردر»)</label><textarea class="input" name="cancelled" rows="5">${esc(st.cancelled)}</textarea></div>
 
+        <h2 style="margin:18px 0 8px">🎁 هدية الطلبات (عطر 50 مل مجاناً)</h2>
+        <label class="set-row"><input type="checkbox" name="loyalty_on" ${st.loyalty_on !== false ? 'checked' : ''}> الهدية شغّالة</label>
+        <div class="field"><label>الهدية مع كل كم طلب؟</label>
+          <select class="input" name="loyalty_every" style="width:auto">${[1, 2, 3, 4, 5, 6, 8, 10].map(n => `<option value="${n}" ${Number(st.loyalty_every || 3) === n ? 'selected' : ''}>${n === 1 ? 'مع كل طلب' : `مع كل ${n === 2 ? 'ثاني' : n === 3 ? 'ثالث' : n === 4 ? 'رابع' : n === 5 ? 'خامس' : n === 6 ? 'سادس' : n === 8 ? 'ثامن' : 'عاشر'} طلب`}</option>`).join('')}</select>
+          <span class="muted small">الطلبات اللي الزبون طلبها قبل الموقع بتنحط لكل زبون من تبويب «الزبائن» وبتنحسب معه.</span></div>
+
+        <h2 style="margin:18px 0 8px">🚚 متابعة شركة التوصيل ورسائل الحالة</h2>
+        <div class="note">كل نص ساعة السيرفر بيشيّك على كل طلب مرفوع لشركة التوصيل. لما تتغير حالته عندهم، بتتغير حالة الطلب هون وبالشيت وبحساب الزبون، وبتنبعتله رسالة الحالة إذا مفعّلة.</div>
+        <label class="set-row"><input type="checkbox" name="track_on" ${st.track_on ? 'checked' : ''}> المتابعة التلقائية شغّالة</label>
+        <div class="set-row"><button type="button" class="btn btn--sm" data-track-dry>🔍 فحص الآن بدون أي تغيير</button><span class="muted small" data-track-out></span></div>
+        ${TRACK_LABELS.map(([k, label, vars]) => { const m = (st.track_msgs || {})[k] || {}; return `<div class="field set-msg">
+          <label class="set-row"><input type="checkbox" name="msg_on_${k}" ${m.on ? 'checked' : ''}> <b>${label}</b>: ابعت رسالة للزبون</label>
+          <textarea class="input" name="msg_${k}" rows="5" data-track-text="${k}" placeholder="جاري تحميل النص الأصلي…">${esc(m.text || '')}</textarea>
+          <span class="muted small">المتغيرات: ${vars}. سطر فيه <b>---</b> بيقسمها لرسالتين.</span></div>`; }).join('')}
+
         <h2 style="margin:18px 0 8px">ربط جوجل شيت</h2>
         <ol class="steps">
           <li>افتح شيت «نسخة من عطور عصفور 2 (الازبط)». الطلبات بتنكتب بتبويب «الطلبات» بأول سطر فاضي بعد آخر طلب.</li>
@@ -2375,15 +2405,40 @@ function reply(o) {
       try { await navigator.clipboard.writeText(code.value); } catch { code.select(); document.execCommand('copy'); }
       toast('تم نسخ الكود');
     });
+    // Empty status texts show the worker's defaults, so they can be edited from there.
+    let trackDefaults = {};
+    if (!DEMO && st.worker_url) workerGet('/track/defaults').then(j => {
+      trackDefaults = j.defaults;
+      dlg.querySelectorAll('[data-track-text]').forEach(t => { if (!t.value) t.value = trackDefaults[t.dataset.trackText] || ''; });
+    }).catch(() => {});
+    $('[data-track-dry]', dlg).addEventListener('click', async e => {
+      const out = $('[data-track-out]', dlg);
+      e.target.disabled = true; out.textContent = 'جاري الفحص…';
+      try {
+        const j = DEMO ? { changes: [] } : await workerGet('/track/run', { method: 'POST', body: JSON.stringify({ dry: true }) });
+        const L = Object.fromEntries(TRACK_LABELS.map(([k, l]) => [k, l]));
+        out.innerHTML = j.changes.length ? j.changes.map(c => c.error ? `${esc(c.order)}: ${esc(c.error)}`
+          : `${esc(c.order)}: ${c.from ? esc(L[c.from] || c.from) + ' ← ' : ''}${esc(L[c.to] || c.to)}${c.message ? ' (رح تنبعت رسالة)' : ''}`).join('<br>')
+          : 'ما في تغييرات جديدة عند شركة التوصيل';
+      } catch (err) { out.textContent = 'ما زبط الفحص: ' + err.message; }
+      e.target.disabled = false;
+    });
     $('[data-reset]', dlg).addEventListener('click', () => {
       form.new_order.value = ORDER_DEFAULTS.new_order; form.confirmed.value = ORDER_DEFAULTS.confirmed;
+      dlg.querySelectorAll('[data-track-text]').forEach(t => (t.value = trackDefaults[t.dataset.trackText] || t.value));
     });
     form.addEventListener('submit', async e => {
       e.preventDefault();
       const url = form.sheet_url.value.trim();
       if (url && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return toast('الرابط لازم يكون رابط Web app من Apps Script وينتهي بـ /exec', true);
       const btn = $('[data-save]', dlg); btn.disabled = true; btn.textContent = 'جاري الحفظ…';
-      const v = { ...st, new_order: form.new_order.value, confirmed: form.confirmed.value, cancelled: form.cancelled.value, sheet_url: url, secret };
+      const v = { ...st, new_order: form.new_order.value, confirmed: form.confirmed.value, cancelled: form.cancelled.value, sheet_url: url, secret,
+        loyalty_on: form.loyalty_on.checked, loyalty_every: Number(form.loyalty_every.value), track_on: form.track_on.checked,
+        // A text left as the default isn't stored, so later changes to the defaults reach it.
+        track_msgs: Object.fromEntries(TRACK_LABELS.map(([k]) => {
+          const text = form[`msg_${k}`].value.trim();
+          return [k, { on: form[`msg_on_${k}`].checked, text: text && text !== String(trackDefaults[k] || '').trim() ? text : '' }];
+        })) };
       try {
         await api.saveOrderSettings(v); S.orderSettings = v;
         // The automatic message uses the same text; hand it to the orders worker too.
@@ -2739,6 +2794,14 @@ function reply(o) {
     if (el.dataset.ofilter) { S.orderFilter = el.dataset.ofilter; return render(); }
     if (el.dataset.cfilter) { S.customers.filter = el.dataset.cfilter; return render(); }
     if (el.matches('[data-creload]')) { S.customers.list = null; return render(); }
+    // Orders the customer had before the site count toward the gift (orders worker /customers/prior).
+    if (el.dataset.cprior) {
+      const n = Number($(`[data-cprior-n="${el.dataset.cprior}"]`).value) || 0;
+      return run(`انحفظ: ${n} طلبات قبل الموقع`, async () => {
+        if (!DEMO) await workerGet('/customers/prior', { method: 'POST', body: JSON.stringify({ phone: el.dataset.cprior, prior_orders: n, name: el.dataset.name }) });
+        S.customers.list = null;
+      });
+    }
     if (el.dataset.ctoggle) { const o = S.customers.open, k = el.dataset.ctoggle; o.has(k) ? o.delete(k) : o.add(k); return render(); }
     if (el.matches('[data-oreload]')) { S.orders = null; return render(); }
     if (el.matches('[data-osettings]')) return openOrderSettings();
