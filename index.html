@@ -1276,6 +1276,18 @@
 
   // The row the way the owner's sheet («الطلبات» tab) is filled by hand: English names with sizes, the
   // offer label its price lookup knows, and each top-grade pick in its own column pair.
+  // Direct Delivery's «اطراف عمان» city (id 41280): ماحص، عين الباشا، الفحيص، البقعة، الجيزة… The sheet's «المنطقه» says «اطراف» for them.
+  // Orders without the picked area (typed by hand) are matched by the area name.
+  const OUTSKIRTS_CITY = 41280;
+  const OUTSKIRTS = ['اطراف عمان', 'الجيزة', 'الحمر', 'الذهيبة', 'القسطل', 'الموقر', 'بدر الجديدة', 'حسبان', 'رجم الشامي-سحاب', 'زيزيا', 'عراق الامير',
+    'ماحص', 'مطار الملكة علياء', 'البقعة', 'الفحيص', 'عين الباشا'];
+  const normArea = s => String(s || '').trim().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ');
+  function isOutskirts(o) {
+    const city = Number(o.attrs?.find(a => a.key === '_delivery_city_id')?.value);
+    if (city) return city === OUTSKIRTS_CITY;
+    const area = normArea(o.address.split(' / ')[0]);
+    return OUTSKIRTS.some(n => normArea(n) === area) || normArea(o.city) === normArea('اطراف عمان');
+  }
   function sheetRow(o) {
     const byTitle = productsByTitle();
     const lines = [], premium = [];
@@ -1295,7 +1307,7 @@
       day: ['الاحد', 'الاثنين', 'الثلاثاء', 'الاربعاء', 'الخميس', 'الجمعة', 'السبت'][next === 5 ? 6 : next] + '\\',
       customer: o.customer, offer, details: lines.join('\n') + '\n.', note: o.note,
       location: [o.city, o.address].filter(Boolean).join(' / '), phone: wa.startsWith('962') ? '0' + wa.slice(3) : o.phone,
-      date: new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }), area: /عم+ان|عمّان/.test(o.city) ? 'داخل' : 'خارج',
+      date: new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }), area: isOutskirts(o) ? 'اطراف' : /عم+ان|عمّان/.test(o.city) ? 'داخل' : 'خارج',
       premium: premium.slice(0, 4), total: o.total, status: SHEET_CONFIRMED
     };
   }
