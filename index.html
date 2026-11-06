@@ -1306,6 +1306,7 @@
     return {
       day: ['الاحد', 'الاثنين', 'الثلاثاء', 'الاربعاء', 'الخميس', 'الجمعة', 'السبت'][next === 5 ? 6 : next] + '\\',
       customer: o.customer, offer, details: lines.join('\n') + '\n.', note: o.note,
+      source: o.tags.includes(MSG_TAG) ? 'اوردر من الرسائل' : 'اوردر من الموقع', channel: o.attrs.find(a => a.key === CHANNEL_KEY)?.value || 'موقع',
       location: [o.city, o.address].filter(Boolean).join(' / '), phone: wa.startsWith('962') ? '0' + wa.slice(3) : o.phone,
       date: new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }), area: isOutskirts(o) ? 'اطراف' : /عم+ان|عمّان/.test(o.city) ? 'داخل' : 'خارج',
       premium: premium.slice(0, 4), total: o.total, status: SHEET_CONFIRMED
@@ -1415,6 +1416,7 @@
         <span class="muted small" style="margin-inline-start:auto">${esc(date)}</span></div>
       <div><b>${esc(o.customer)}</b> · <span dir="ltr">${esc(o.phone || 'بدون رقم')}</span></div>
       ${o.city || o.address ? `<div class="muted small">${esc([o.city, o.address].filter(Boolean).join(' / '))}</div>` : ''}
+      ${o.tags.includes(MSG_TAG) ? `<div class="small order__src">💬 طلب من الرسائل · ${esc(o.attrs.find(a => a.key === CHANNEL_KEY)?.value || '')}</div>` : ''}
       ${o.attrs.some(a => a.key === 'مصدر الزبون') ? `<div class="small order__src">📍 ${esc(o.attrs.find(a => a.key === 'مصدر الزبون').value)}</div>` : ''}
       ${open ? orderDetail(o) : `<div class="order__items">${esc(itemsText(o, false))}</div>`}
       <div class="order__foot"><b>${jod(o.total)}</b><span class="actions">
@@ -1589,13 +1591,19 @@
   // messages and the delivery upload work on it as on any order. Tagged طلب-يدوي: the worker sends no automatic
   // WhatsApp for it; the form's own checkbox decides.
   const MANUAL_TAG = 'طلب-يدوي';
+  // Orders taken in chats: the sheet writes them as «اوردر من الرسائل» with the chat in «من وين الاوردر».
+  const MSG_TAG = 'طلب-رسائل', CHANNEL_KEY = 'من وين الطلب';
+  const CHANNELS = ['واتس', 'انستا', 'مسنجر', 'تيك توك', 'اتصال'];
+  // The sheet's «العرض» list: label, paid bottles, their size, a 50 ml on top, usual price (blank: type it).
+  const PACKAGES = [['علبة 110مل', 1, '110', false, 15], ['علبتين 110مل', 2, '110', false, 23], ['3 علب 110مل + علبة 50مل', 3, '110', true, 32],
+    ['4 علب 110مل + علبة 50مل', 4, '110', true, null], ['5 علب 110مل + علبة 50مل', 5, '110', true, 50], ['علبة 50مل', 1, '50', false, 11],
+    ['علبتين 50مل', 2, '50', false, 15], ['3 علب 50مل', 3, '50', false, 20], ['4 علب 50مل', 4, '50', false, null]];
   const ORDINALS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن'];
   function openManualOrder() {
     const st = S.orderSettings, byTitle = productsByTitle();
     const perfumes = S.products.filter(p => p.status === 'ACTIVE').sort(byPriority);
-    const offers = S.offers.filter(o => o.status === 'ACTIVE');
     const cart = [];   // { title, sub, variantId, qty, price, props: [[key, value]] }
-    let kind = 'single', offer = null;
+    let kind = 'offer', pack = null;
     const money = n => `${+Number(n).toFixed(2)} د.أ`;
     dlg.innerHTML = `<form data-mo-form novalidate>
       <div class="dlg-head"><h2 style="margin:0">➕ إضافة طلب يدوي</h2><button type="button" class="icon-btn" data-close aria-label="إغلاق">×</button></div>
@@ -1606,6 +1614,7 @@
           <div class="field"><label>اسم الزبون الكامل *</label><input class="input" name="name" placeholder="مثال: محمد أحمد"></div>
           <div class="field"><label>رقم الهاتف *</label><input class="input" name="phone" dir="ltr" inputmode="tel" placeholder="079xxxxxxx"></div>
           <div class="field"><label>رقم بديل (اختياري)</label><input class="input" name="alt" dir="ltr" inputmode="tel" placeholder="078xxxxxxx"></div>
+          <div class="field"><label>من وين الطلب *</label><select class="input" name="channel">${CHANNELS.map(c => `<option>${c}</option>`).join('')}</select></div>
           <div class="field"><label>المحافظة *</label><select class="input" name="gov"><option value="">اختر المحافظة…</option>
             ${DELIVERY_AREAS.map(([g]) => `<option>${esc(g)}</option>`).join('')}</select></div>
         </div>
@@ -1615,7 +1624,7 @@
         <div class="field"><label>ملاحظات التوصيل للمندوب</label><textarea class="input" name="note" rows="2" placeholder="مثال: الاتصال قبل الوصول"></textarea></div>
 
         <h3 class="oedit__h">🛍️ العطور والعروض</h3>
-        <div class="mo-kinds">${[['single', '🧴 عطر فردي'], ['offer', '🎁 باقة / عرض'], ['custom', '✏️ مخصص']]
+        <div class="mo-kinds">${[['offer', '🎁 باقة / عرض'], ['single', '🧴 عطر من الكتالوج'], ['custom', '✏️ مخصص']]
           .map(([k, l]) => `<button type="button" class="btn btn--sm" data-mo-kind="${k}" aria-pressed="${k === kind}">${l}</button>`).join('')}</div>
         <div class="mo-adder" data-mo-adder></div>
         <div data-mo-cart></div>
@@ -1680,7 +1689,7 @@
         <label class="mo-chk"><input type="checkbox" data-mo-tester> 🎁 إرفاق تستر هدية مجاني مع العطر</label>`;
       if (kind === 'offer') adder.innerHTML = `
         <div class="field"><label>العرض</label><select class="input" data-mo-offer><option value="">اختر العرض…</option>
-          ${offers.map(o => `<option value="${esc(o.id)}">${esc(o.title)} · ${money(o.variants[0]?.price || 0)}</option>`).join('')}</select></div>
+          ${PACKAGES.map(([label, , , , price], i) => `<option value="${i}">${esc(label)}${price ? ` · ${money(price)}` : ''}</option>`).join('')}</select></div>
         <div data-mo-slots></div>
         <div class="field"><label>سعر العرض (د.أ) <span class="muted small">بيتحسب لحاله مع زيادات النخب الأول، وبتقدر تغيره</span></label>
           <input class="input" type="number" min="0" step="0.5" data-mo-price dir="ltr"></div>`;
@@ -1693,22 +1702,22 @@
         </div>`;
       adder.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn--primary btn--block" data-mo-add>＋ إضافة للطلب</button>');
     }
-    // An offer's slots come from its page settings: N paid perfumes of its size, plus the free 50 ml one if it has it.
-    async function pickOffer(id) {
-      offer = offers.find(o => o.id === id) || null;
+    // A package's slots: its paid bottles, then the 50 ml on top (keyed like the offer page's gift, so the sheet
+    // writes the same «+ علبة 50مل» label).
+    function pickOffer(i) {
+      pack = PACKAGES[i] || null;
       const box = $('[data-mo-slots]', adder);
-      if (!offer) { box.innerHTML = ''; return; }
-      if (!DEMO && offer.config === undefined) { box.innerHTML = '<div class="muted small">جاري تحميل العرض…</div>'; await api.loadOfferDetails(offer); }
-      const c = offerConfig(offer);
-      const slots = Array.from({ length: c.slot_count }, (_, i) => [`العطر ${ORDINALS[i] || i + 1}`, String(c.slot_size)]);
-      if (c.gift_slot) slots.push(['عطر مجاني هدية', '50']);
-      box.innerHTML = `<div class="oedit__line">${slots.map(([key, size]) => `<small class="muted">${esc(key)}</small>${pickRow({ base: '', size, top: false, extra: 0, key })}`).join('')}</div>`;
+      if (!pack) { box.innerHTML = ''; return; }
+      const [, count, size, extra50] = pack;
+      const slots = Array.from({ length: count }, (_, n) => [`العطر ${ORDINALS[n] || n + 1}`, size]);
+      if (extra50) slots.push(['عطر مجاني هدية', '50']);
+      box.innerHTML = `<div class="oedit__line">${slots.map(([key, sz]) => `<small class="muted">${esc(key)}</small>${pickRow({ base: '', size: sz, top: false, extra: 0, key })}`).join('')}</div>`;
       offerPrice();
     }
     const offerPrice = () => {
-      if (!offer) return;
+      if (!pack) return;
       const extras = [...adder.querySelectorAll('[data-p-extra]')].reduce((n, x) => n + (num(x.value) || 0), 0);
-      $('[data-mo-price]', adder).value = +(Number(offer.variants[0]?.price || 0) + extras).toFixed(2);
+      $('[data-mo-price]', adder).value = pack[4] == null ? (extras || '') : +(pack[4] + extras).toFixed(2);
     };
 
     function addItem() {
@@ -1721,7 +1730,8 @@
           props: tester ? [['هدية', 'تستر مجاني']] : [] });
       }
       if (kind === 'offer') {
-        if (!offer) return toast('اختار العرض', true);
+        if (!pack) return toast('اختار العرض', true);
+        if (price == null) return toast('اكتب سعر العرض', true);
         // Written the way the offer page writes them: "<name> (نخب أول) +5 د.أ" under "<slot> (110 مل)".
         const picks = [...adder.querySelectorAll('[data-pick]')].map(row => {
           const name = $('[data-p-name]', row).value.trim(), size = $('[data-p-size]', row).value;
@@ -1730,21 +1740,20 @@
           return { name, key: `${row.dataset.key} (${size} مل)`, value: `${name}${top && !onlyTop ? ' (نخب أول)' : ''}${extra ? ` +${extra} د.أ` : ''}` };
         });
         if (!picks.length || picks.some(x => !x.name)) return toast('اختار كل عطور العرض', true);
-        cart.push({ title: offer.title, sub: picks.map(x => x.value).join('، '), variantId: offer.variants[0].id, qty: 1,
-          price: price ?? Number(offer.variants[0].price), props: picks.map(x => [x.key, x.value]) });
+        cart.push({ title: pack[0], sub: picks.map(x => x.value).join('، '), qty: 1, price, props: picks.map(x => [x.key, x.value]) });
       }
       if (kind === 'custom') {
         const title = $('[data-mo-title]', adder).value.trim();
         if (!title || price == null) return toast('اكتب الاسم والسعر', true);
         cart.push({ title, sub: 'منتج مخصص', qty, price, props: [] });
       }
-      offer = null;
+      pack = null;
       renderAdder(); renderCart();
     }
 
     form.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.moKind) { kind = b.dataset.moKind; offer = null; renderAdder(); }
+      if (b.dataset.moKind) { kind = b.dataset.moKind; pack = null; renderAdder(); }
       if (b.matches('[data-mo-add]')) addItem();
       if (b.dataset.moDel != null) { cart.splice(Number(b.dataset.moDel), 1); renderCart(); }
       if (b.matches('[data-p-del]')) { const row = b.closest('[data-pick]'); row.previousElementSibling?.remove(); row.remove(); offerPrice(); }
@@ -1787,7 +1796,7 @@
       const order = {
         customer: { toUpsert: { firstName: first, lastName: last, phone: '+' + phone } },
         currency: 'JOD', phone: '+' + phone, note: f.note.value.trim(), financialStatus: 'PENDING',
-        tags: [MANUAL_TAG, ...(confirmed ? [TAG_CONFIRMED] : [])],
+        tags: [MANUAL_TAG, MSG_TAG, ...(confirmed ? [TAG_CONFIRMED] : [])],
         shippingAddress: address, billingAddress: address,
         lineItems: cart.map(l => ({ ...(l.variantId ? { variantId: l.variantId } : { title: l.title }), quantity: l.qty, requiresShipping: true, priceSet: amount(l.price),
           properties: l.props.map(([k, v]) => ({ name: k, value: v })) })),
@@ -1797,6 +1806,7 @@
         customAttributes: [
           ...(area ? [{ key: 'منطقة التوصيل', value: `${f.gov.value} / ${area[0]}` }, { key: '_delivery_city_id', value: String(area[1]) },
             { key: '_delivery_village_id', value: String(area[2]) }] : []),
+          { key: CHANNEL_KEY, value: f.channel.value },
           ...(alt ? [{ key: 'رقم بديل', value: alt }] : []), ...(f.internal.value.trim() ? [{ key: 'ملاحظة داخلية', value: f.internal.value.trim() }] : [])
         ]
       };
@@ -2325,7 +2335,7 @@ function doPost(e) {
     if (r > sh.getMaxRows()) return reply({ ok: false, error: 'الشيت خلص سطور، زيد سطور بتبويب الطلبات' });
 
     const set = (col, v) => sh.getRange(r, col).setValue(v);
-    set(1, 'اوردر من الموقع');
+    set(1, d.source || 'اوردر من الموقع');
     set(3, d.day);
     set(5, d.customer);
     set(6, d.offer);
@@ -2336,7 +2346,7 @@ function doPost(e) {
     const [y, m, day] = d.date.split('-').map(Number);
     set(14, new Date(y, m - 1, day));
     set(15, d.status || 'قيد التوصيل');
-    set(16, 'موقع');
+    set(16, d.channel || 'موقع');
     set(17, d.area);
     const keys = ss.getSheetByName('الإعدادات').getRange('H2:H').getValues().flat().filter(String);
     d.premium.forEach((p, i) => { set(25 + i * 2, matchKey(keys, p.name)); set(26 + i * 2, p.size); });
